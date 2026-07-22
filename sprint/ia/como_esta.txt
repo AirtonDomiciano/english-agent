@@ -1,0 +1,39 @@
+Hoje a IA faz isso:
+
+Você
+↓
+
+OpenAI
+↓
+
+Resposta
+
+Na próxima etapa ela fará isso:
+
+Carrega memória
+
+↓
+
+Adiciona System Prompt
+
+↓
+
+Adiciona histórico
+
+↓
+
+Envia para OpenAI
+
+↓
+
+Recebe resposta
+
+↓
+
+Salva usuário
+
+↓
+
+Salva IA
+
+A partir daí ela começa a lembrar da conversa.

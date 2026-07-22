@@ -1,0 +1,8 @@
+{
+    "chat.tools.terminal.autoApprove": {
+        "/^python -c \"from app\\.chat\\.service import ConversationService; from app\\.prompts\\.system_prompt import SYSTEM_PROMPT; print\\('imports ok', bool\\(SYSTEM_PROMPT\\)\\)\"$/": {
+            "approve": true,
+            "matchCommandLine": true
+        }
+    }
+}
