@@ -29,15 +29,18 @@ DEFAULT_PERSONAL_CONTEXT: dict[str, Any] = {
             "Python",
         ],
     },
-    "learning_preferences": [
-        "Use vocabulary appropriate for a B1 learner.",
-        "Keep responses concise and natural.",
-        "Correct important mistakes gently.",
-        "Show the corrected sentence before continuing.",
-        "Ask only one question at a time.",
-        "If the user writes in Portuguese, help express the same idea in English.",
-        "Encourage answers in English.",
-    ],
+    "learning_preferences": {
+        "correction_style": "gentle",
+        "preferred_language": "English",
+        "explanation_language": "Portuguese when necessary",
+        "conversation_topics": [
+            "software development",
+            "daily routine",
+            "gym",
+            "violin",
+            "games",
+        ],
+    },
 }
 
 

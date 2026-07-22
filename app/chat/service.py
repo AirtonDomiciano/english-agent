@@ -4,18 +4,23 @@ from app.memory.conversation_memory import ConversationMemory
 from app.prompts.system_prompt import SYSTEM_PROMPT
 
 
+DEFAULT_CONTEXT_WINDOW_SIZE = 20
+
+
 class ConversationService:
     def __init__(
         self,
         ai_client: OpenAIClient | None = None,
         memory: ConversationMemory | None = None,
         personal_context: PersonalContext | None = None,
+        context_window_size: int = DEFAULT_CONTEXT_WINDOW_SIZE,
     ) -> None:
         self.ai_client = ai_client or OpenAIClient()
         self.memory = memory or ConversationMemory()
         self.personal_context = (
             personal_context or PersonalContext()
         )
+        self.context_window_size = max(0, context_window_size)
 
     def handle_message(self, message: str) -> str:
         cleaned_message = message.strip()
@@ -26,7 +31,9 @@ class ConversationService:
                 "practice English."
             )
 
-        history = self.memory.load()
+        history = self.memory.load_recent(
+            limit=self.context_window_size
+        )
 
         messages = [
             *history,

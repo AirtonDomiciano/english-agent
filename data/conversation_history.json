@@ -14,5 +14,13 @@
   {
     "role": "assistant",
     "content": "I'm very sorry to hear that. You said, \"My wife cheated on me, and it really shook me up.\" That is correct.\n\nDo you want to talk more about it? How are you coping with these feelings?"
+  },
+  {
+    "role": "user",
+    "content": "What technologies do I work with?"
+  },
+  {
+    "role": "assistant",
+    "content": "You work with Angular, NestJS, GraphQL, SQL Server, and Python. \n\nCan you tell me which is your favorite technology to use and why?"
   }
 ]

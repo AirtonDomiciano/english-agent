@@ -28,6 +28,14 @@ class ConversationMemory:
         except (json.JSONDecodeError, OSError):
             return []
 
+    def load_recent(self, limit: int = 20) -> list[dict[str, Any]]:
+        if limit <= 0:
+            return []
+
+        history = self.load()
+
+        return history[-limit:]
+
     def append(self, role: str, content: str) -> None:
         history = self.load()
 
