@@ -7,6 +7,7 @@ from typing import Any
 DEFAULT_PERSONAL_CONTEXT: dict[str, Any] = {
     "name": "Airton",
     "english_level": "B1",
+    "learning_mode": "DAILY",
     "primary_goal": (
         "Improve English through natural daily conversations, "
         "especially speaking, vocabulary and writing."
@@ -73,7 +74,10 @@ class PersonalContext:
             if not isinstance(context, dict):
                 return deepcopy(DEFAULT_PERSONAL_CONTEXT)
 
-            return context
+            return {
+                **deepcopy(DEFAULT_PERSONAL_CONTEXT),
+                **context,
+            }
         except (json.JSONDecodeError, OSError):
             return deepcopy(DEFAULT_PERSONAL_CONTEXT)
 
@@ -91,6 +95,11 @@ class PersonalContext:
         context = self.load()
         context.update(values)
         self.save(context)
+
+    def get_learning_mode(self) -> str:
+        context = self.load()
+
+        return str(context.get("learning_mode", "DAILY"))
 
     def to_prompt(self) -> str:
         context = self.load()

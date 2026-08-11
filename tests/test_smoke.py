@@ -1,5 +1,6 @@
 from app.context.personal_context import PersonalContext
 from app.chat.service import ConversationService
+from app.learning import LearningMode
 from app.memory.conversation_memory import ConversationMemory
 from app.startup.bootstrap import bootstrap_app
 
@@ -93,6 +94,7 @@ def test_personal_context_creates_default_file(tmp_path):
 
     assert saved_context["name"] == "Airton"
     assert saved_context["english_level"] == "B1"
+    assert saved_context["learning_mode"] == "DAILY"
     assert saved_context["learning_preferences"] == {
         "correction_style": "gentle",
         "preferred_language": "English",
@@ -128,6 +130,21 @@ def test_personal_context_handles_invalid_json(tmp_path):
     assert context.load()["name"] == "Airton"
 
 
+def test_personal_context_adds_missing_default_values(tmp_path):
+    storage_path = tmp_path / "personal_context.json"
+    storage_path.write_text(
+        '{"name": "Airton"}',
+        encoding="utf-8",
+    )
+
+    context = PersonalContext(storage_path=storage_path)
+    saved_context = context.load()
+
+    assert saved_context["name"] == "Airton"
+    assert saved_context["learning_mode"] == "DAILY"
+    assert saved_context["english_level"] == "B1"
+
+
 def test_personal_context_is_added_to_instructions(tmp_path):
     memory = ConversationMemory(
         storage_path=tmp_path / "history.json"
@@ -145,6 +162,157 @@ def test_personal_context_is_added_to_instructions(tmp_path):
 
     assert "Airton" in ai_client.instructions
     assert '"english_level": "B1"' in ai_client.instructions
+
+
+def test_default_daily_learning_mode_is_added_to_instructions(tmp_path):
+    memory = ConversationMemory(
+        storage_path=tmp_path / "history.json"
+    )
+    personal_context = create_personal_context(tmp_path)
+    ai_client = InspectableFakeAIClient()
+
+    service = ConversationService(
+        ai_client=ai_client,
+        memory=memory,
+        personal_context=personal_context,
+    )
+
+    service.handle_message("Hello")
+
+    assert "Active learning mode: DAILY" in ai_client.instructions
+    assert (
+        "Do not turn every interaction into a formal lesson"
+        in ai_client.instructions
+    )
+
+
+def test_learning_mode_from_personal_context_is_used(tmp_path):
+    memory = ConversationMemory(
+        storage_path=tmp_path / "history.json"
+    )
+    personal_context = create_personal_context(tmp_path)
+    personal_context.update({
+        "learning_mode": "TEACHER",
+    })
+    ai_client = InspectableFakeAIClient()
+
+    service = ConversationService(
+        ai_client=ai_client,
+        memory=memory,
+        personal_context=personal_context,
+    )
+
+    service.handle_message("Teach me something")
+
+    assert "Active learning mode: TEACHER" in ai_client.instructions
+    assert "Teach one concept at a time" in ai_client.instructions
+
+
+def test_explicit_learning_mode_overrides_personal_context(tmp_path):
+    memory = ConversationMemory(
+        storage_path=tmp_path / "history.json"
+    )
+    personal_context = create_personal_context(tmp_path)
+    personal_context.update({
+        "learning_mode": "TEACHER",
+    })
+    ai_client = InspectableFakeAIClient()
+
+    service = ConversationService(
+        ai_client=ai_client,
+        memory=memory,
+        personal_context=personal_context,
+        learning_mode="conversation",
+    )
+
+    service.handle_message("Let's chat")
+
+    assert "Active learning mode: CONVERSATION" in ai_client.instructions
+    assert "original sentence" in ai_client.instructions
+    assert "Active learning mode: TEACHER" not in ai_client.instructions
+
+
+def test_vocabulary_learning_mode_instructions_are_available(tmp_path):
+    memory = ConversationMemory(
+        storage_path=tmp_path / "history.json"
+    )
+    personal_context = create_personal_context(tmp_path)
+    ai_client = InspectableFakeAIClient()
+
+    service = ConversationService(
+        ai_client=ai_client,
+        memory=memory,
+        personal_context=personal_context,
+        learning_mode=LearningMode.VOCABULARY,
+    )
+
+    service.handle_message("I need new words")
+
+    assert "Active learning mode: VOCABULARY" in ai_client.instructions
+    assert "Software development" in ai_client.instructions
+    assert "Finish each vocabulary group with a short test" in (
+        ai_client.instructions
+    )
+
+
+def test_invalid_context_learning_mode_falls_back_to_daily(tmp_path):
+    memory = ConversationMemory(
+        storage_path=tmp_path / "history.json"
+    )
+    personal_context = create_personal_context(tmp_path)
+    personal_context.update({
+        "learning_mode": "UNKNOWN",
+    })
+    ai_client = InspectableFakeAIClient()
+
+    service = ConversationService(
+        ai_client=ai_client,
+        memory=memory,
+        personal_context=personal_context,
+    )
+
+    service.handle_message("Hello")
+
+    assert service.current_learning_mode() == LearningMode.DAILY
+    assert "Active learning mode: DAILY" in ai_client.instructions
+
+
+def test_set_learning_mode_persists_selected_mode(tmp_path):
+    memory = ConversationMemory(
+        storage_path=tmp_path / "history.json"
+    )
+    personal_context = create_personal_context(tmp_path)
+
+    service = ConversationService(
+        ai_client=FakeAIClient(),
+        memory=memory,
+        personal_context=personal_context,
+    )
+
+    selected_mode = service.set_learning_mode("teacher")
+
+    assert selected_mode == LearningMode.TEACHER
+    assert personal_context.load()["learning_mode"] == "TEACHER"
+
+
+def test_set_learning_mode_rejects_unknown_mode(tmp_path):
+    memory = ConversationMemory(
+        storage_path=tmp_path / "history.json"
+    )
+    personal_context = create_personal_context(tmp_path)
+
+    service = ConversationService(
+        ai_client=FakeAIClient(),
+        memory=memory,
+        personal_context=personal_context,
+    )
+
+    try:
+        service.set_learning_mode("unknown")
+    except ValueError as error:
+        assert "Available modes" in str(error)
+    else:
+        raise AssertionError("Expected ValueError")
 
 
 def test_memory_can_clear_history(tmp_path):

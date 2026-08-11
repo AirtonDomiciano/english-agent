@@ -30,6 +30,24 @@ english-agent/
 - Correção de inglês
 - Memória da conversa
 
+### Learning Modes
+
+O agente separa regras globais e regras de modo:
+
+- `app/prompts/system_prompt.py` mantém apenas regras gerais do assistente.
+- `app/learning/modes.py` registra os modos `DAILY`, `TEACHER`, `CONVERSATION` e `VOCABULARY`, cada um com suas próprias instruções.
+- `ConversationService` combina `System Prompt`, instruções do modo ativo, `PersonalContext` e janela recente da conversa antes de chamar a OpenAI.
+- O modo ativo fica em `PersonalContext` como `learning_mode`, com `DAILY` como padrão.
+
+Para alternar no terminal:
+
+```bash
+/mode teacher
+/mode conversation
+/mode vocabulary
+/mode daily
+```
+
 ### Fase 2 — Voz
 - IA fala
 - Resposta por microfone

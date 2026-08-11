@@ -13,6 +13,8 @@ CLEAR_COMMANDS = {
     "/limpar",
 }
 
+MODE_COMMAND = "/mode"
+
 
 def main() -> None:
     app = bootstrap_app()
@@ -25,6 +27,10 @@ def main() -> None:
 
     print("Type 'exit' to finish.")
     print("Type '/clear' to clear the conversation.\n")
+    print(
+        "Type '/mode daily|teacher|conversation|vocabulary' "
+        "to change learning mode.\n"
+    )
 
     print(
         "Agent: Good morning, Airton! "
@@ -34,14 +40,48 @@ def main() -> None:
     while True:
         try:
             message = input("\nYou: ").strip()
+            normalized_message = message.lower()
 
-            if message.lower() in EXIT_COMMANDS:
+            if normalized_message in EXIT_COMMANDS:
                 print("\nAgent: See you later, Airton!")
                 break
 
-            if message.lower() in CLEAR_COMMANDS:
+            if normalized_message in CLEAR_COMMANDS:
                 conversation.clear_history()
                 print("\nAgent: Conversation history cleared.")
+                continue
+
+            if (
+                normalized_message == MODE_COMMAND
+                or normalized_message.startswith(f"{MODE_COMMAND} ")
+            ):
+                mode_name = message[len(MODE_COMMAND):].strip()
+
+                if not mode_name:
+                    current_mode = (
+                        conversation.current_learning_mode().value
+                    )
+                    available_modes = ", ".join(
+                        conversation.learning_modes.available_modes()
+                    )
+                    print(
+                        "\nAgent: Current learning mode is "
+                        f"{current_mode}. Available modes: "
+                        f"{available_modes}."
+                    )
+                    continue
+
+                try:
+                    selected_mode = conversation.set_learning_mode(
+                        mode_name
+                    )
+                    print(
+                        "\nAgent: Learning mode changed to "
+                        f"{selected_mode.value}."
+                    )
+                except ValueError as error:
+                    print(f"\nAgent: {error}")
+
                 continue
 
             response = conversation.handle_message(message)
