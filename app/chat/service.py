@@ -29,7 +29,12 @@ class ConversationService:
         self.learning_mode = learning_mode
         self.context_window_size = max(0, context_window_size)
 
-    def handle_message(self, message: str) -> str:
+    def handle_message(
+        self,
+        message: str,
+        additional_instructions: str | None = None,
+        save_user_message: bool = True,
+    ) -> str:
         cleaned_message = message.strip()
 
         if not cleaned_message:
@@ -50,7 +55,9 @@ class ConversationService:
             },
         ]
 
-        instructions = self._build_instructions()
+        instructions = self._build_instructions(
+            additional_instructions=additional_instructions,
+        )
 
         try:
             response = self.ai_client.generate_response(
@@ -58,10 +65,11 @@ class ConversationService:
                 instructions=instructions,
             )
 
-            self.memory.append(
-                role="user",
-                content=cleaned_message,
-            )
+            if save_user_message:
+                self.memory.append(
+                    role="user",
+                    content=cleaned_message,
+                )
 
             self.memory.append(
                 role="assistant",
@@ -107,7 +115,10 @@ class ConversationService:
 
         return resolved_mode
 
-    def _build_instructions(self) -> str:
+    def _build_instructions(
+        self,
+        additional_instructions: str | None = None,
+    ) -> str:
         personal_context = self.personal_context.to_prompt()
         learning_mode_instructions = (
             self.learning_modes.get_instructions(
@@ -115,8 +126,16 @@ class ConversationService:
             )
         )
 
+        instruction_parts = [
+            SYSTEM_PROMPT.strip(),
+            learning_mode_instructions,
+        ]
+
+        if additional_instructions:
+            instruction_parts.append(additional_instructions.strip())
+
+        instruction_parts.append(personal_context)
+
         return (
-            f"{SYSTEM_PROMPT.strip()}\n\n"
-            f"{learning_mode_instructions}\n\n"
-            f"{personal_context}"
+            "\n\n".join(instruction_parts)
         )

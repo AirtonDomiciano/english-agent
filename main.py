@@ -1,4 +1,5 @@
 from app.chat.service import ConversationService
+from app.daily import DailyScheduler
 from app.startup.bootstrap import bootstrap_app
 
 
@@ -19,6 +20,7 @@ MODE_COMMAND = "/mode"
 def main() -> None:
     app = bootstrap_app()
     conversation = ConversationService()
+    scheduler = DailyScheduler()
 
     print(
         f"English Agent initialized in phase: "
@@ -32,10 +34,13 @@ def main() -> None:
         "to change learning mode.\n"
     )
 
-    print(
-        "Agent: Good morning, Airton! "
-        "How are you feeling today?"
-    )
+    daily_results = scheduler.run_pending(conversation)
+
+    if daily_results:
+        for result in daily_results:
+            print(f"Agent: {result.response}")
+    else:
+        print("Agent: I'm here when you want to practice.")
 
     while True:
         try:

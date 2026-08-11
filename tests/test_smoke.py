@@ -1,5 +1,13 @@
+from datetime import datetime
+
 from app.context.personal_context import PersonalContext
 from app.chat.service import ConversationService
+from app.daily import (
+    DailyScheduler,
+    DailySessionStore,
+    TopicProvider,
+    create_default_daily_sessions,
+)
 from app.learning import LearningMode
 from app.memory.conversation_memory import ConversationMemory
 from app.startup.bootstrap import bootstrap_app
@@ -489,6 +497,193 @@ def test_conversation_service_keeps_full_history_saved(tmp_path):
         "role": "assistant",
         "content": "Fake response for: Current message",
     }
+
+
+def create_daily_service(tmp_path, ai_client=None):
+    memory = ConversationMemory(
+        storage_path=tmp_path / "history.json"
+    )
+    personal_context = create_personal_context(tmp_path)
+
+    return ConversationService(
+        ai_client=ai_client or InspectableFakeAIClient(),
+        memory=memory,
+        personal_context=personal_context,
+    )
+
+
+def test_topic_provider_chooses_configured_topic():
+    topic_provider = TopicProvider(
+        topics=("Angular",),
+    )
+
+    assert topic_provider.choose_topic() == "Angular"
+
+
+def test_default_daily_sessions_include_morning_and_afternoon():
+    sessions = create_default_daily_sessions()
+
+    assert [
+        session.session_id
+        for session in sessions
+    ] == [
+        "morning",
+        "afternoon",
+    ]
+
+
+def test_daily_scheduler_triggers_morning_inside_window(tmp_path):
+    ai_client = InspectableFakeAIClient()
+    conversation = create_daily_service(
+        tmp_path,
+        ai_client=ai_client,
+    )
+    store = DailySessionStore(
+        storage_path=tmp_path / "daily_sessions.json"
+    )
+    scheduler = DailyScheduler(
+        store=store,
+        topic_provider=TopicProvider(
+            topics=("MMORPG",),
+        ),
+    )
+
+    results = scheduler.run_pending(
+        conversation_service=conversation,
+        current_datetime=datetime(2026, 8, 11, 8, 45),
+    )
+
+    assert len(results) == 1
+    assert results[0].session_id == "morning"
+    assert results[0].topic == "MMORPG"
+    assert "Companion personality instructions" in (
+        ai_client.instructions
+    )
+    assert "Active learning mode: DAILY" in ai_client.instructions
+    assert "Topic: MMORPG" in ai_client.messages[-1]["content"]
+
+
+def test_daily_scheduler_does_not_trigger_after_window(tmp_path):
+    conversation = create_daily_service(tmp_path)
+    store = DailySessionStore(
+        storage_path=tmp_path / "daily_sessions.json"
+    )
+    scheduler = DailyScheduler(
+        store=store,
+        topic_provider=TopicProvider(
+            topics=("Angular",),
+        ),
+    )
+
+    results = scheduler.run_pending(
+        conversation_service=conversation,
+        current_datetime=datetime(2026, 8, 11, 9, 1),
+    )
+
+    assert results == []
+    assert conversation.memory.load() == []
+    assert store.load() == {}
+
+
+def test_daily_scheduler_does_not_trigger_twice_same_day(tmp_path):
+    conversation = create_daily_service(tmp_path)
+    store = DailySessionStore(
+        storage_path=tmp_path / "daily_sessions.json"
+    )
+    scheduler = DailyScheduler(
+        store=store,
+        topic_provider=TopicProvider(
+            topics=("games",),
+        ),
+    )
+    current_datetime = datetime(2026, 8, 11, 8, 45)
+
+    first_results = scheduler.run_pending(
+        conversation_service=conversation,
+        current_datetime=current_datetime,
+    )
+    second_results = scheduler.run_pending(
+        conversation_service=conversation,
+        current_datetime=current_datetime,
+    )
+
+    assert len(first_results) == 1
+    assert second_results == []
+    assert store.was_triggered(
+        session_id="morning",
+        current_date=current_datetime.date(),
+    )
+    assert len(conversation.memory.load()) == 1
+
+
+def test_daily_session_uses_conversation_service_without_user_memory(
+    tmp_path,
+):
+    ai_client = InspectableFakeAIClient()
+    conversation = create_daily_service(
+        tmp_path,
+        ai_client=ai_client,
+    )
+    scheduler = DailyScheduler(
+        store=DailySessionStore(
+            storage_path=tmp_path / "daily_sessions.json"
+        ),
+        topic_provider=TopicProvider(
+            topics=("artificial intelligence",),
+        ),
+    )
+
+    scheduler.run_pending(
+        conversation_service=conversation,
+        current_datetime=datetime(2026, 8, 11, 8, 45),
+    )
+
+    history = conversation.memory.load()
+
+    assert history == [
+        {
+            "role": "assistant",
+            "content": "Fake response",
+        },
+    ]
+    assert "artificial intelligence" in (
+        ai_client.messages[-1]["content"]
+    )
+
+
+def test_manual_conversation_still_works_after_daily_scheduler(
+    tmp_path,
+):
+    conversation = create_daily_service(
+        tmp_path,
+        ai_client=FakeAIClient(),
+    )
+    scheduler = DailyScheduler(
+        store=DailySessionStore(
+            storage_path=tmp_path / "daily_sessions.json"
+        ),
+        topic_provider=TopicProvider(
+            topics=("technology",),
+        ),
+    )
+
+    scheduler.run_pending(
+        conversation_service=conversation,
+        current_datetime=datetime(2026, 8, 11, 9, 1),
+    )
+    reply = conversation.handle_message("Manual hello")
+
+    assert reply == "Fake response for: Manual hello"
+    assert conversation.memory.load() == [
+        {
+            "role": "user",
+            "content": "Manual hello",
+        },
+        {
+            "role": "assistant",
+            "content": "Fake response for: Manual hello",
+        },
+    ]
 
 
 def test_bootstrap_creates_expected_structure(tmp_path):

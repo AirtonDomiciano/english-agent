@@ -48,6 +48,21 @@ Para alternar no terminal:
 /mode daily
 ```
 
+### Daily Companion + Scheduler
+
+As conversas iniciadas pelo agente ficam em uma camada separada:
+
+- `app/daily/sessions.py` define `DailySession`, janelas de horário e o estado mínimo de execução diária.
+- `app/daily/scheduler.py` decide quais sessões devem rodar no momento atual.
+- `app/daily/topics.py` escolhe temas locais, sem buscar notícias reais.
+- `app/daily/companion_prompt.py` contém a personalidade companion.
+- `DailySession` usa o `ConversationService`, então OpenAI, memória, `PersonalContext` e Learning Modes continuam centralizados no fluxo existente.
+
+Sessões iniciais:
+
+- `morning`: 08:30 até 09:00.
+- `afternoon`: 14:00 até 14:30.
+
 ### Fase 2 — Voz
 - IA fala
 - Resposta por microfone
