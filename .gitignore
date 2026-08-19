@@ -15,3 +15,4 @@ venv/
 
 # Generated application data
 data/conversation_history.json
+data/

@@ -22,5 +22,109 @@
   {
     "role": "assistant",
     "content": "You work with Angular, NestJS, GraphQL, SQL Server, and Python. \n\nCan you tell me which is your favorite technology to use and why?"
+  },
+  {
+    "role": "user",
+    "content": "Good afternoon."
+  },
+  {
+    "role": "assistant",
+    "content": "Good afternoon, Airton! How is your day going so far?"
+  },
+  {
+    "role": "user",
+    "content": "repeat a message please"
+  },
+  {
+    "role": "assistant",
+    "content": "Of course! Which message would you like me to repeat?"
+  },
+  {
+    "role": "user",
+    "content": "the old message"
+  },
+  {
+    "role": "assistant",
+    "content": "Sure! Here's the message I sent before:\n\n\"You work with Angular, NestJS, GraphQL, SQL Server, and Python.\n\nCan you tell me which is your favorite technology to use and why?\" \n\nDo you want me to say it again or explain something?"
+  },
+  {
+    "role": "user",
+    "content": "ok, leave a message. my days is tranquilo."
+  },
+  {
+    "role": "assistant",
+    "content": "Got it! Here’s a message for you:\n\nYour sentence: \"my days is tranquilo.\"\n\nIn English, you can say: \"My day is calm\" or \"My day is peaceful.\"\n\nSo, the message is:  \nI’m glad your day is calm. Sometimes a tranquilo day is just what we need.\n\nHow do you usually spend calm days?"
+  },
+  {
+    "role": "user",
+    "content": "i should study, but i'm being lazy.."
+  },
+  {
+    "role": "assistant",
+    "content": "Your sentence is clear! Just a small fix: say \"I should study, but I'm being lazy.\"\n\nIt happens to all of us! What topic are you planning to study?"
+  },
+  {
+    "role": "user",
+    "content": "i must learning programing, IA, MCP and others.."
+  },
+  {
+    "role": "assistant",
+    "content": "Good effort! A better way to say it is:  \n\"I must learn programming, AI, MCP, and others.\"\n\nWhat is MCP? And which one do you want to start with?"
+  },
+  {
+    "role": "user",
+    "content": "i want start with FIgma."
+  },
+  {
+    "role": "assistant",
+    "content": "Nice choice! You said, \"I want start with FIgma.\" A small correction: \"I want to start with Figma.\"\n\nHave you used Figma before, or is this your first time?"
+  },
+  {
+    "role": "user",
+    "content": "yes, i use Figma and my projects"
+  },
+  {
+    "role": "assistant",
+    "content": "Great! Try this:  \n\"Yes, I use Figma for my projects.\"\n\nWhat kind of projects do you create with Figma?"
+  },
+  {
+    "role": "user",
+    "content": "Ledger for Aluai, and UI UX in Imex"
+  },
+  {
+    "role": "assistant",
+    "content": "Nice work! You can say:  \n\"I create a ledger for Aluai and do UI/UX work for Imex.\"\n\nAre you designing the whole UI/UX or focusing on specific parts?"
+  },
+  {
+    "role": "user",
+    "content": "no, my focus in programing. i'm dev full-stack"
+  },
+  {
+    "role": "assistant",
+    "content": "Perfect! Just a small improvement:  \n\"My focus is programming. I'm a full-stack developer.\"\n\nDo you use your Figma designs in your programming work often?"
+  },
+  {
+    "role": "user",
+    "content": "in the Aluai yes, and Imex no. In imex i'm full-stack developer"
+  },
+  {
+    "role": "assistant",
+    "content": "Good! A clearer way:  \n\"For Aluai, yes. For Imex, no. At Imex, I’m a full-stack developer.\"\n\nWhat tech do you usually use at Imex for your full-stack work?"
+  },
+  {
+    "role": "user",
+    "content": "use angular and nestjs"
+  },
+  {
+    "role": "assistant",
+    "content": "Nice! You can say:  \n\"I use Angular and NestJS.\"\n\nWhich do you enjoy more, frontend with Angular or backend with NestJS?"
+  },
+  {
+    "role": "user",
+    "content": "today enjoy more frontend"
+  },
+  {
+    "role": "assistant",
+    "content": "Great! Just a small correction:  \n\"Today, I enjoyed the frontend more.\"\n\nWhat did you work on in the frontend today?"
   }
 ]
