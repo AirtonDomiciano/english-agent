@@ -1,9 +1,11 @@
 from datetime import datetime
+from threading import Event
 
 from app.context.personal_context import PersonalContext
 from app.chat.service import ConversationService
 from app.daily import (
     DailyScheduler,
+    DailySchedulerRunner,
     DailySessionStore,
     TopicProvider,
     create_default_daily_sessions,
@@ -38,6 +40,15 @@ class InspectableFakeAIClient:
         self.messages = messages
 
         return "Fake response"
+
+
+class FailingAIClient:
+    def generate_response(
+        self,
+        messages: list[dict],
+        instructions: str,
+    ) -> str:
+        raise RuntimeError("OpenAI unavailable")
 
 
 def create_personal_context(tmp_path):
@@ -499,6 +510,26 @@ def test_conversation_service_keeps_full_history_saved(tmp_path):
     }
 
 
+def test_conversation_service_keeps_manual_error_response(tmp_path):
+    memory = ConversationMemory(
+        storage_path=tmp_path / "history.json"
+    )
+    personal_context = create_personal_context(tmp_path)
+    service = ConversationService(
+        ai_client=FailingAIClient(),
+        memory=memory,
+        personal_context=personal_context,
+    )
+
+    reply = service.handle_message("Hello")
+
+    assert reply == (
+        "I couldn't answer right now. "
+        "Error: OpenAI unavailable"
+    )
+    assert memory.load() == []
+
+
 def create_daily_service(tmp_path, ai_client=None):
     memory = ConversationMemory(
         storage_path=tmp_path / "history.json"
@@ -614,6 +645,93 @@ def test_daily_scheduler_does_not_trigger_twice_same_day(tmp_path):
         current_date=current_datetime.date(),
     )
     assert len(conversation.memory.load()) == 1
+
+
+def test_daily_scheduler_runner_keeps_checking_until_window(
+    tmp_path,
+):
+    conversation = create_daily_service(tmp_path)
+    store = DailySessionStore(
+        storage_path=tmp_path / "daily_sessions.json"
+    )
+    current_times = iter([
+        datetime(2026, 8, 11, 8, 0),
+        datetime(2026, 8, 11, 8, 45),
+    ])
+    scheduler = DailyScheduler(
+        store=store,
+        topic_provider=TopicProvider(
+            topics=("Angular",),
+        ),
+        now_provider=lambda: next(
+            current_times,
+            datetime(2026, 8, 11, 8, 45),
+        ),
+    )
+    received_results = []
+    result_received = Event()
+
+    runner = DailySchedulerRunner(
+        scheduler=scheduler,
+        conversation_service=conversation,
+        on_result=lambda result: (
+            received_results.append(result),
+            result_received.set(),
+        ),
+        poll_interval_seconds=0.1,
+    )
+
+    runner.start()
+
+    try:
+        assert result_received.wait(timeout=1)
+    finally:
+        runner.stop()
+
+    assert len(received_results) == 1
+    assert received_results[0].session_id == "morning"
+    assert received_results[0].topic == "Angular"
+
+
+def test_daily_scheduler_does_not_mark_triggered_when_ai_fails(
+    tmp_path,
+):
+    failing_conversation = create_daily_service(
+        tmp_path,
+        ai_client=FailingAIClient(),
+    )
+    store = DailySessionStore(
+        storage_path=tmp_path / "daily_sessions.json"
+    )
+    scheduler = DailyScheduler(
+        store=store,
+        topic_provider=TopicProvider(
+            topics=("technology",),
+        ),
+    )
+    current_datetime = datetime(2026, 8, 11, 8, 45)
+
+    failed_results = scheduler.run_pending(
+        conversation_service=failing_conversation,
+        current_datetime=current_datetime,
+    )
+
+    retry_conversation = create_daily_service(
+        tmp_path,
+        ai_client=InspectableFakeAIClient(),
+    )
+    retry_results = scheduler.run_pending(
+        conversation_service=retry_conversation,
+        current_datetime=current_datetime,
+    )
+
+    assert failed_results == []
+    assert failing_conversation.memory.load() == []
+    assert len(retry_results) == 1
+    assert store.was_triggered(
+        session_id="morning",
+        current_date=current_datetime.date(),
+    )
 
 
 def test_daily_session_uses_conversation_service_without_user_memory(

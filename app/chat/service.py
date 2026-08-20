@@ -34,6 +34,7 @@ class ConversationService:
         message: str,
         additional_instructions: str | None = None,
         save_user_message: bool = True,
+        raise_on_error: bool = False,
     ) -> str:
         cleaned_message = message.strip()
 
@@ -79,6 +80,9 @@ class ConversationService:
             return response
 
         except Exception as error:
+            if raise_on_error:
+                raise
+
             return (
                 "I couldn't answer right now. "
                 f"Error: {error}"

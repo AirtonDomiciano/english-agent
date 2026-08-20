@@ -1,4 +1,4 @@
-from app.daily.scheduler import DailyScheduler
+from app.daily.scheduler import DailyScheduler, DailySchedulerRunner
 from app.daily.sessions import (
     DailySession,
     DailySessionResult,
@@ -11,6 +11,7 @@ from app.daily.topics import TopicProvider
 
 __all__ = [
     "DailyScheduler",
+    "DailySchedulerRunner",
     "DailySession",
     "DailySessionResult",
     "DailySessionStore",

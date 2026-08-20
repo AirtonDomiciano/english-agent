@@ -128,11 +128,16 @@ class DailySession:
             return None
 
         topic = topic_provider.choose_topic()
-        response = conversation_service.handle_message(
-            message=self._build_start_message(topic),
-            additional_instructions=COMPANION_PERSONALITY_PROMPT,
-            save_user_message=False,
-        )
+
+        try:
+            response = conversation_service.handle_message(
+                message=self._build_start_message(topic),
+                additional_instructions=COMPANION_PERSONALITY_PROMPT,
+                save_user_message=False,
+                raise_on_error=True,
+            )
+        except Exception:
+            return None
 
         store.mark_triggered(
             session_id=self.session_id,

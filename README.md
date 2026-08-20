@@ -54,6 +54,7 @@ As conversas iniciadas pelo agente ficam em uma camada separada:
 
 - `app/daily/sessions.py` define `DailySession`, janelas de horário e o estado mínimo de execução diária.
 - `app/daily/scheduler.py` decide quais sessões devem rodar no momento atual.
+- `DailySchedulerRunner` mantém o scheduler ativo enquanto o agente está aberto no terminal.
 - `app/daily/topics.py` escolhe temas locais, sem buscar notícias reais.
 - `app/daily/companion_prompt.py` contém a personalidade companion.
 - `DailySession` usa o `ConversationService`, então OpenAI, memória, `PersonalContext` e Learning Modes continuam centralizados no fluxo existente.

@@ -1,5 +1,7 @@
+from threading import Lock
+
 from app.chat.service import ConversationService
-from app.daily import DailyScheduler
+from app.daily import DailyScheduler, DailySchedulerRunner
 from app.startup.bootstrap import bootstrap_app
 
 
@@ -21,6 +23,7 @@ def main() -> None:
     app = bootstrap_app()
     conversation = ConversationService()
     scheduler = DailyScheduler()
+    conversation_lock = Lock()
 
     print(
         f"English Agent initialized in phase: "
@@ -34,16 +37,25 @@ def main() -> None:
         "to change learning mode.\n"
     )
 
-    daily_results = scheduler.run_pending(conversation)
+    def print_daily_result(result) -> None:
+        print(f"\nAgent: {result.response}")
 
-    if daily_results:
-        for result in daily_results:
-            print(f"Agent: {result.response}")
-    else:
+    daily_runner = DailySchedulerRunner(
+        scheduler=scheduler,
+        conversation_service=conversation,
+        on_result=print_daily_result,
+        lock=conversation_lock,
+    )
+
+    daily_results = daily_runner.run_once()
+
+    if not daily_results:
         print("Agent: I'm here when you want to practice.")
 
-    while True:
-        try:
+    daily_runner.start(run_immediately=False)
+
+    try:
+        while True:
             message = input("\nYou: ").strip()
             normalized_message = message.lower()
 
@@ -52,7 +64,9 @@ def main() -> None:
                 break
 
             if normalized_message in CLEAR_COMMANDS:
-                conversation.clear_history()
+                with conversation_lock:
+                    conversation.clear_history()
+
                 print("\nAgent: Conversation history cleared.")
                 continue
 
@@ -63,12 +77,14 @@ def main() -> None:
                 mode_name = message[len(MODE_COMMAND):].strip()
 
                 if not mode_name:
-                    current_mode = (
-                        conversation.current_learning_mode().value
-                    )
-                    available_modes = ", ".join(
-                        conversation.learning_modes.available_modes()
-                    )
+                    with conversation_lock:
+                        current_mode = (
+                            conversation.current_learning_mode().value
+                        )
+                        available_modes = ", ".join(
+                            conversation.learning_modes.available_modes()
+                        )
+
                     print(
                         "\nAgent: Current learning mode is "
                         f"{current_mode}. Available modes: "
@@ -77,9 +93,11 @@ def main() -> None:
                     continue
 
                 try:
-                    selected_mode = conversation.set_learning_mode(
-                        mode_name
-                    )
+                    with conversation_lock:
+                        selected_mode = conversation.set_learning_mode(
+                            mode_name
+                        )
+
                     print(
                         "\nAgent: Learning mode changed to "
                         f"{selected_mode.value}."
@@ -89,13 +107,15 @@ def main() -> None:
 
                 continue
 
-            response = conversation.handle_message(message)
+            with conversation_lock:
+                response = conversation.handle_message(message)
 
             print(f"\nAgent: {response}")
 
-        except KeyboardInterrupt:
-            print("\n\nAgent: See you later, Airton!")
-            break
+    except KeyboardInterrupt:
+        print("\n\nAgent: See you later, Airton!")
+    finally:
+        daily_runner.stop()
 
 
 if __name__ == "__main__":
