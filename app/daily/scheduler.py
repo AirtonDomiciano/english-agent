@@ -10,7 +10,8 @@ from app.daily.sessions import (
     DailySessionStore,
     create_default_daily_sessions,
 )
-from app.daily.topics import TopicProvider
+from app.daily.live_topics import LiveTopicProvider
+from app.daily.topics import TopicProviderProtocol
 
 
 class DailyScheduler:
@@ -23,12 +24,12 @@ class DailyScheduler:
             ...,
         ] | None = None,
         store: DailySessionStore | None = None,
-        topic_provider: TopicProvider | None = None,
+        topic_provider: TopicProviderProtocol | None = None,
         now_provider: Callable[[], datetime] | None = None,
     ) -> None:
         self.sessions = sessions or create_default_daily_sessions()
         self.store = store or DailySessionStore()
-        self.topic_provider = topic_provider or TopicProvider()
+        self.topic_provider = topic_provider or LiveTopicProvider()
         self.now_provider = now_provider or datetime.now
 
     def run_pending(

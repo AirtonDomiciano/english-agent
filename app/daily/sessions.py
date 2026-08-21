@@ -5,7 +5,10 @@ from pathlib import Path
 
 from app.chat.service import ConversationService
 from app.daily.companion_prompt import COMPANION_PERSONALITY_PROMPT
-from app.daily.topics import TopicProvider
+from app.daily.topics import (
+    DailyTopic,
+    TopicProviderProtocol,
+)
 
 
 @dataclass(frozen=True)
@@ -20,7 +23,7 @@ class SessionWindow:
 @dataclass(frozen=True)
 class DailySessionResult:
     session_id: str
-    topic: str
+    topic: DailyTopic
     response: str
 
 
@@ -117,7 +120,7 @@ class DailySession:
     def start(
         self,
         conversation_service: ConversationService,
-        topic_provider: TopicProvider,
+        topic_provider: TopicProviderProtocol,
         store: DailySessionStore,
         current_datetime: datetime,
     ) -> DailySessionResult | None:
@@ -127,7 +130,9 @@ class DailySession:
         ):
             return None
 
-        topic = topic_provider.choose_topic()
+        topic = DailyTopic.from_value(
+            topic_provider.choose_topic()
+        )
 
         try:
             response = conversation_service.handle_message(
@@ -150,15 +155,28 @@ class DailySession:
             response=response,
         )
 
-    def _build_start_message(self, topic: str) -> str:
+    def _build_start_message(self, topic: DailyTopic) -> str:
+        published_at = (
+            topic.published_at
+            if topic.published_at
+            else "unknown"
+        )
+
         return (
             "Start a daily companion conversation now.\n"
             f"Session: {self.session_id}\n"
-            f"Topic: {topic}\n"
+            f"Category: {topic.category}\n"
+            f"Title: {topic.title}\n"
+            f"Short summary: {topic.short_summary}\n"
+            f"Source: {topic.source_name}\n"
+            f"Published at: {published_at}\n"
             "Open with one short, natural message in English. "
             "Sound like a friendly companion who remembered something "
             "interesting, not like a teacher starting a class. "
-            "Invite the user to answer with one question."
+            "Use the category, title and short summary only as context. "
+            "Do not read it like news, do not mention a list, and do not "
+            "include the source URL. Invite the user to answer with one "
+            "easy question."
         )
 
 

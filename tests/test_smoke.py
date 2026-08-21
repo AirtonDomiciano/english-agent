@@ -1,12 +1,15 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from threading import Event
 
 from app.context.personal_context import PersonalContext
 from app.chat.service import ConversationService
 from app.daily import (
+    DailyTopic,
     DailyScheduler,
     DailySchedulerRunner,
     DailySessionStore,
+    LiveTopicCache,
+    LiveTopicProvider,
     TopicProvider,
     create_default_daily_sessions,
 )
@@ -543,12 +546,227 @@ def create_daily_service(tmp_path, ai_client=None):
     )
 
 
+def build_rss_feed(*items):
+    rss_items = "\n".join(
+        (
+            "<item>"
+            f"<title>{item['title']}</title>"
+            f"<link>{item['link']}</link>"
+            f"<description>{item['description']}</description>"
+            f"<pubDate>{item['published_at']}</pubDate>"
+            f"<source>{item['source_name']}</source>"
+            "</item>"
+        )
+        for item in items
+    )
+
+    return f"<rss><channel>{rss_items}</channel></rss>"
+
+
+def live_topic_cache(tmp_path):
+    return LiveTopicCache(
+        storage_path=tmp_path / "live_topic_cache.json"
+    )
+
+
 def test_topic_provider_chooses_configured_topic():
     topic_provider = TopicProvider(
         topics=("Angular",),
     )
 
     assert topic_provider.choose_topic() == "Angular"
+
+
+def test_live_topic_provider_returns_valid_topic(tmp_path):
+    feed = build_rss_feed({
+        "title": "Angular releases a new developer preview",
+        "link": "https://example.com/angular-preview",
+        "description": (
+            "Angular is testing a smaller build pipeline for apps."
+        ),
+        "published_at": "Fri, 21 Aug 2026 11:00:00 GMT",
+        "source_name": "Example Tech",
+    })
+    requested = {}
+
+    def fetcher(url, timeout_seconds):
+        requested["url"] = url
+        requested["timeout_seconds"] = timeout_seconds
+
+        return feed
+
+    provider = LiveTopicProvider(
+        categories=("Angular",),
+        cache=live_topic_cache(tmp_path),
+        fetcher=fetcher,
+        timeout_seconds=1.5,
+        max_live_attempts=1,
+        now_provider=lambda: datetime(
+            2026,
+            8,
+            21,
+            12,
+            0,
+            tzinfo=timezone.utc,
+        ),
+    )
+
+    topic = provider.choose_topic()
+
+    assert topic == DailyTopic(
+        category="Angular",
+        title="Angular releases a new developer preview",
+        short_summary=(
+            "Angular is testing a smaller build pipeline for apps."
+        ),
+        source_name="Example Tech",
+        source_url="https://example.com/angular-preview",
+        published_at="2026-08-21T11:00:00+00:00",
+    )
+    assert "Angular+news" in requested["url"]
+    assert requested["timeout_seconds"] == 1.5
+
+
+def test_live_topic_provider_falls_back_when_source_fails(
+    tmp_path,
+):
+    def fetcher(url, timeout_seconds):
+        raise RuntimeError("network down")
+
+    provider = LiveTopicProvider(
+        categories=("artificial intelligence",),
+        cache=live_topic_cache(tmp_path),
+        fetcher=fetcher,
+        fallback_provider=TopicProvider(
+            topics=("games",),
+        ),
+        max_live_attempts=1,
+    )
+
+    topic = provider.choose_topic()
+
+    assert topic.category == "games"
+    assert topic.source_name == "local"
+
+
+def test_live_topic_provider_uses_timeout_for_fetcher(tmp_path):
+    requested_timeouts = []
+
+    def fetcher(url, timeout_seconds):
+        requested_timeouts.append(timeout_seconds)
+        raise TimeoutError("too slow")
+
+    provider = LiveTopicProvider(
+        categories=("technology",),
+        cache=live_topic_cache(tmp_path),
+        fetcher=fetcher,
+        fallback_provider=TopicProvider(
+            topics=("technology",),
+        ),
+        timeout_seconds=0.25,
+        max_live_attempts=1,
+    )
+
+    topic = provider.choose_topic()
+
+    assert topic.category == "technology"
+    assert requested_timeouts == [0.25]
+
+
+def test_live_topic_provider_uses_cache_without_refetching(
+    tmp_path,
+):
+    feed = build_rss_feed(
+        {
+            "title": "First cached games topic",
+            "link": "https://example.com/games-1",
+            "description": "A short games update.",
+            "published_at": "Fri, 21 Aug 2026 10:00:00 GMT",
+            "source_name": "Example Games",
+        },
+        {
+            "title": "Second cached games topic",
+            "link": "https://example.com/games-2",
+            "description": "Another short games update.",
+            "published_at": "Fri, 21 Aug 2026 09:00:00 GMT",
+            "source_name": "Example Games",
+        },
+    )
+    fetch_count = {
+        "value": 0,
+    }
+
+    def fetcher(url, timeout_seconds):
+        fetch_count["value"] += 1
+
+        return feed
+
+    provider = LiveTopicProvider(
+        categories=("games",),
+        cache=live_topic_cache(tmp_path),
+        fetcher=fetcher,
+        cache_ttl_seconds=3600,
+        max_live_attempts=1,
+        now_provider=lambda: datetime(
+            2026,
+            8,
+            21,
+            12,
+            0,
+            tzinfo=timezone.utc,
+        ),
+    )
+
+    first_topic = provider.choose_topic()
+    second_topic = provider.choose_topic()
+
+    assert fetch_count["value"] == 1
+    assert first_topic.title != second_topic.title
+
+
+def test_live_topic_provider_avoids_simple_repetition(
+    tmp_path,
+):
+    feed = build_rss_feed(
+        {
+            "title": "League patch changes jungle balance",
+            "link": "https://example.com/lol-1",
+            "description": "The patch focuses on jungle pacing.",
+            "published_at": "Fri, 21 Aug 2026 10:00:00 GMT",
+            "source_name": "Example Esports",
+        },
+        {
+            "title": "League adds a new ranked experiment",
+            "link": "https://example.com/lol-2",
+            "description": "Riot is testing ranked queue changes.",
+            "published_at": "Fri, 21 Aug 2026 09:00:00 GMT",
+            "source_name": "Example Esports",
+        },
+    )
+    provider = LiveTopicProvider(
+        categories=("League of Legends",),
+        cache=live_topic_cache(tmp_path),
+        fetcher=lambda url, timeout_seconds: feed,
+        max_live_attempts=1,
+        now_provider=lambda: datetime(
+            2026,
+            8,
+            21,
+            12,
+            0,
+            tzinfo=timezone.utc,
+        ),
+    )
+
+    first_topic = provider.choose_topic()
+    second_topic = provider.choose_topic()
+
+    assert first_topic.title == (
+        "League patch changes jungle balance"
+    )
+    assert second_topic.title == (
+        "League adds a new ranked experiment"
+    )
 
 
 def test_default_daily_sessions_include_morning_and_afternoon():
@@ -591,7 +809,7 @@ def test_daily_scheduler_triggers_morning_inside_window(tmp_path):
         ai_client.instructions
     )
     assert "Active learning mode: DAILY" in ai_client.instructions
-    assert "Topic: MMORPG" in ai_client.messages[-1]["content"]
+    assert "Category: MMORPG" in ai_client.messages[-1]["content"]
 
 
 def test_daily_scheduler_does_not_trigger_after_window(tmp_path):
@@ -732,6 +950,61 @@ def test_daily_scheduler_does_not_mark_triggered_when_ai_fails(
         session_id="morning",
         current_date=current_datetime.date(),
     )
+
+
+def test_daily_session_uses_live_topic_details(tmp_path):
+    feed = build_rss_feed({
+        "title": "New MMORPG focuses on large-scale PvP",
+        "link": "https://example.com/mmorpg-pvp",
+        "description": (
+            "The game is leaning into castle sieges and big guild "
+            "battles."
+        ),
+        "published_at": "Fri, 21 Aug 2026 11:30:00 GMT",
+        "source_name": "Example MMO",
+    })
+    ai_client = InspectableFakeAIClient()
+    conversation = create_daily_service(
+        tmp_path,
+        ai_client=ai_client,
+    )
+    provider = LiveTopicProvider(
+        categories=("MMORPG",),
+        cache=live_topic_cache(tmp_path),
+        fetcher=lambda url, timeout_seconds: feed,
+        max_live_attempts=1,
+        now_provider=lambda: datetime(
+            2026,
+            8,
+            21,
+            12,
+            0,
+            tzinfo=timezone.utc,
+        ),
+    )
+    scheduler = DailyScheduler(
+        store=DailySessionStore(
+            storage_path=tmp_path / "daily_sessions.json"
+        ),
+        topic_provider=provider,
+    )
+
+    results = scheduler.run_pending(
+        conversation_service=conversation,
+        current_datetime=datetime(2026, 8, 21, 8, 45),
+    )
+
+    message = ai_client.messages[-1]["content"]
+
+    assert len(results) == 1
+    assert results[0].topic.category == "MMORPG"
+    assert "Category: MMORPG" in message
+    assert "Title: New MMORPG focuses on large-scale PvP" in message
+    assert (
+        "Short summary: The game is leaning into castle sieges"
+        in message
+    )
+    assert "https://example.com/mmorpg-pvp" not in message
 
 
 def test_daily_session_uses_conversation_service_without_user_memory(

@@ -55,7 +55,8 @@ As conversas iniciadas pelo agente ficam em uma camada separada:
 - `app/daily/sessions.py` define `DailySession`, janelas de horário e o estado mínimo de execução diária.
 - `app/daily/scheduler.py` decide quais sessões devem rodar no momento atual.
 - `DailySchedulerRunner` mantém o scheduler ativo enquanto o agente está aberto no terminal.
-- `app/daily/topics.py` escolhe temas locais, sem buscar notícias reais.
+- `app/daily/topics.py` define o formato comum `DailyTopic` e mantém o `TopicProvider` local como fallback.
+- `app/daily/live_topics.py` busca assuntos recentes via RSS configurável, usa timeout, cache local em `data/live_topic_cache.json` e evita repetir títulos recentes.
 - `app/daily/companion_prompt.py` contém a personalidade companion.
 - `DailySession` usa o `ConversationService`, então OpenAI, memória, `PersonalContext` e Learning Modes continuam centralizados no fluxo existente.
 
@@ -63,6 +64,14 @@ Sessões iniciais:
 
 - `morning`: 08:30 até 09:00.
 - `afternoon`: 14:00 até 14:30.
+
+Configurações opcionais:
+
+- `ENGLISH_AGENT_NEWS_SEARCH_URL_TEMPLATE`: template público de RSS com `{query}`.
+- `ENGLISH_AGENT_LIVE_TOPIC_CACHE`: caminho do cache local.
+- `ENGLISH_AGENT_LIVE_TOPIC_TIMEOUT`: timeout da busca ao vivo.
+- `ENGLISH_AGENT_LIVE_TOPIC_CACHE_TTL`: validade do cache em segundos.
+- `ENGLISH_AGENT_MAX_LIVE_TOPIC_ATTEMPTS`: quantidade máxima de categorias tentadas por rodada.
 
 ### Fase 2 — Voz
 - IA fala
