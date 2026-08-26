@@ -96,6 +96,16 @@ Configurações opcionais:
 - `ENGLISH_AGENT_LIVE_TOPIC_CACHE_TTL`: validade do cache em segundos.
 - `ENGLISH_AGENT_MAX_LIVE_TOPIC_ATTEMPTS`: quantidade máxima de categorias tentadas por rodada.
 
+### Companion Interaction Engine
+
+A companion também possui uma camada para iniciativas espontâneas durante o dia:
+
+- `app/companion/interactions.py` seleciona e cria interações `SOCIAL`, `RANDOM_TOPIC`, `MINI_QUIZ`, `LEARNING_RECALL`, `QUICK_CHALLENGE` e `LEARNING_COMMITMENT`.
+- A engine usa `ConversationService`, `LearningCycle` e topic providers existentes; ela não chama OpenAI diretamente.
+- O estado mínimo fica em `data/companion_interactions.json`, ignorado pelo Git.
+- `LEARNING_COMMITMENT` usa uma janela configurável perto das 15h e pode fazer follow-ups em 10, 30, 45 e 60 minutos.
+- Interações comuns respeitam períodos de silêncio e não insistem como a prática principal.
+
 ### Fase 2 — Voz
 - IA fala
 - Resposta por microfone
