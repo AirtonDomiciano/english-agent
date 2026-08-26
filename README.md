@@ -48,6 +48,29 @@ Para alternar no terminal:
 /mode daily
 ```
 
+### Adaptive Learning Cycle
+
+O ciclo adaptativo guarda o foco de aprendizagem sem transformar a companion em professora formal:
+
+```text
+Adaptive Learning Cycle
+↓
+Current Topic
+↓
+Learning Stage
+↓
+Progress
+↓
+Review
+↓
+Conversation
+```
+
+- `app/learning/cycle.py` mantém o catálogo inicial, estado persistente, progresso, revisão e atividades curtas de escrita.
+- O estado fica em `data/learning_cycle.json`, ignorado pelo Git.
+- `ConversationService` apenas injeta um resumo do ciclo nas instruções; ele não calcula progresso nem escolhe próximo tópico.
+- Learning Modes continuam definindo comportamento; o ciclo fornece contexto.
+
 ### Daily Companion + Scheduler
 
 As conversas iniciadas pelo agente ficam em uma camada separada:

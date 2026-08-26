@@ -1,6 +1,10 @@
 from app.ai.openai_client import OpenAIClient
 from app.context.personal_context import PersonalContext
-from app.learning import LearningMode, LearningModeRegistry
+from app.learning import (
+    LearningCycle,
+    LearningMode,
+    LearningModeRegistry,
+)
 from app.memory.conversation_memory import ConversationMemory
 from app.prompts.system_prompt import SYSTEM_PROMPT
 
@@ -16,6 +20,7 @@ class ConversationService:
         personal_context: PersonalContext | None = None,
         learning_mode: LearningMode | str | None = None,
         learning_modes: LearningModeRegistry | None = None,
+        learning_cycle: LearningCycle | None = None,
         context_window_size: int = DEFAULT_CONTEXT_WINDOW_SIZE,
     ) -> None:
         self.ai_client = ai_client or OpenAIClient()
@@ -26,6 +31,7 @@ class ConversationService:
         self.learning_modes = (
             learning_modes or LearningModeRegistry()
         )
+        self.learning_cycle = learning_cycle or LearningCycle()
         self.learning_mode = learning_mode
         self.context_window_size = max(0, context_window_size)
 
@@ -133,6 +139,7 @@ class ConversationService:
         instruction_parts = [
             SYSTEM_PROMPT.strip(),
             learning_mode_instructions,
+            self.learning_cycle.to_prompt_context(),
         ]
 
         if additional_instructions:

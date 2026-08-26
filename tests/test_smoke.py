@@ -14,6 +14,13 @@ from app.daily import (
     create_default_daily_sessions,
 )
 from app.learning import LearningMode
+from app.learning import (
+    CEFRLevel,
+    LearningCycle,
+    LearningCycleStore,
+    LearningStage,
+    WritingPracticeProvider,
+)
 from app.memory.conversation_memory import ConversationMemory
 from app.startup.bootstrap import bootstrap_app
 
@@ -57,6 +64,15 @@ class FailingAIClient:
 def create_personal_context(tmp_path):
     return PersonalContext(
         storage_path=tmp_path / "personal_context.json"
+    )
+
+
+def create_learning_cycle(tmp_path, default_level=CEFRLevel.A1):
+    return LearningCycle(
+        store=LearningCycleStore(
+            storage_path=tmp_path / "learning_cycle.json",
+            default_level=default_level,
+        )
     )
 
 
@@ -337,6 +353,230 @@ def test_set_learning_mode_rejects_unknown_mode(tmp_path):
         raise AssertionError("Expected ValueError")
 
 
+def test_learning_cycle_creates_initial_state(tmp_path):
+    cycle = create_learning_cycle(
+        tmp_path,
+        default_level=CEFRLevel.A1,
+    )
+
+    state = cycle.current_state()
+    topic = cycle.current_topic()
+
+    assert state.current_level == CEFRLevel.A1
+    assert state.current_topic == "greetings-introductions"
+    assert topic.name == "Greetings and Introductions"
+    assert state.current_stage == LearningStage.COMPREHENSION
+    assert state.target_days == 15
+    assert state.progress == {
+        "comprehension": 0,
+        "vocabulary": 0,
+        "writing": 0,
+        "conversation": 0,
+    }
+
+
+def test_learning_cycle_changes_stage(tmp_path):
+    cycle = create_learning_cycle(tmp_path)
+
+    state = cycle.change_stage(LearningStage.WRITING)
+
+    assert state.current_stage == LearningStage.WRITING
+    assert cycle.current_state().current_stage == (
+        LearningStage.WRITING
+    )
+
+
+def test_learning_cycle_updates_progress(tmp_path):
+    cycle = create_learning_cycle(tmp_path)
+
+    state = cycle.update_progress(
+        metric="conversation",
+        score=45,
+    )
+
+    assert state.progress["conversation"] == 45
+
+
+def test_learning_cycle_clamps_progress(tmp_path):
+    cycle = create_learning_cycle(tmp_path)
+
+    state = cycle.update_progress(
+        metric="writing",
+        score=150,
+    )
+
+    assert state.progress["writing"] == 100
+
+
+def test_learning_cycle_marks_current_topic_completed(tmp_path):
+    cycle = create_learning_cycle(tmp_path)
+
+    state = cycle.complete_current_topic()
+
+    assert "greetings-introductions" in state.completed_topics
+    assert state.current_stage == LearningStage.MASTERED
+
+
+def test_learning_cycle_marks_topic_for_review(tmp_path):
+    cycle = create_learning_cycle(tmp_path)
+
+    state = cycle.mark_for_review("simple-present")
+
+    assert state.topics_to_review == ["simple-present"]
+
+
+def test_learning_cycle_selects_warm_up_topic(tmp_path):
+    cycle = create_learning_cycle(tmp_path)
+    cycle.mark_for_review("simple-present")
+    cycle.mark_for_review("daily-routine")
+    cycle.record_review(
+        topic_id="daily-routine",
+        reviewed_on=datetime(2026, 8, 20).date(),
+    )
+
+    warm_up = cycle.choose_warm_up_topic()
+
+    assert warm_up is not None
+    assert warm_up.id == "simple-present"
+
+
+def test_learning_cycle_persists_state(tmp_path):
+    storage_path = tmp_path / "learning_cycle.json"
+    first_cycle = LearningCycle(
+        store=LearningCycleStore(storage_path=storage_path)
+    )
+    first_cycle.change_stage("VOCABULARY")
+    first_cycle.update_progress("vocabulary", 80)
+
+    second_cycle = LearningCycle(
+        store=LearningCycleStore(storage_path=storage_path)
+    )
+    state = second_cycle.current_state()
+
+    assert state.current_stage == LearningStage.VOCABULARY
+    assert state.progress["vocabulary"] == 80
+
+
+def test_learning_cycle_loads_old_data_without_cycle_fields(
+    tmp_path,
+):
+    storage_path = tmp_path / "learning_cycle.json"
+    storage_path.write_text(
+        '{"current_level": "B1"}',
+        encoding="utf-8",
+    )
+    cycle = LearningCycle(
+        store=LearningCycleStore(storage_path=storage_path)
+    )
+
+    state = cycle.current_state()
+
+    assert state.current_level == CEFRLevel.B1
+    assert state.current_topic == "greetings-introductions"
+    assert state.current_stage == LearningStage.COMPREHENSION
+    assert state.progress["conversation"] == 0
+
+
+def test_writing_practice_uses_current_learning_focus(tmp_path):
+    cycle = create_learning_cycle(tmp_path)
+    cycle.change_stage(LearningStage.WRITING)
+    provider = WritingPracticeProvider(cycle)
+
+    prompt = provider.create_prompt()
+
+    assert "Greetings and Introductions" in prompt
+    assert "level A1" in prompt
+    assert "4-5 simple sentences" in prompt
+
+
+def test_writing_practice_can_use_conversation_service(
+    tmp_path,
+):
+    memory = ConversationMemory(
+        storage_path=tmp_path / "history.json"
+    )
+    personal_context = create_personal_context(tmp_path)
+    learning_cycle = create_learning_cycle(tmp_path)
+    learning_cycle.change_stage(LearningStage.WRITING)
+    practice = WritingPracticeProvider(learning_cycle)
+    ai_client = InspectableFakeAIClient()
+    service = ConversationService(
+        ai_client=ai_client,
+        memory=memory,
+        personal_context=personal_context,
+        learning_cycle=learning_cycle,
+    )
+
+    service.handle_message(
+        practice.build_review_message("My name is Airton.")
+    )
+
+    assert "Review this short writing practice response" in (
+        ai_client.messages[-1]["content"]
+    )
+    assert "Current topic: Greetings and Introductions" in (
+        ai_client.messages[-1]["content"]
+    )
+
+
+def test_conversation_service_adds_learning_cycle_context(
+    tmp_path,
+):
+    memory = ConversationMemory(
+        storage_path=tmp_path / "history.json"
+    )
+    personal_context = create_personal_context(tmp_path)
+    learning_cycle = create_learning_cycle(tmp_path)
+    learning_cycle.change_stage(LearningStage.WRITING)
+    learning_cycle.update_progress("writing", 70)
+    ai_client = InspectableFakeAIClient()
+
+    service = ConversationService(
+        ai_client=ai_client,
+        memory=memory,
+        personal_context=personal_context,
+        learning_cycle=learning_cycle,
+    )
+
+    service.handle_message("Hello")
+
+    assert "Adaptive Learning Cycle context" in (
+        ai_client.instructions
+    )
+    assert '"current_level": "A1"' in ai_client.instructions
+    assert (
+        '"current_topic": "Greetings and Introductions"'
+        in ai_client.instructions
+    )
+    assert '"current_stage": "WRITING"' in ai_client.instructions
+    assert '"writing": 70' in ai_client.instructions
+
+
+def test_learning_cycle_context_keeps_learning_modes(
+    tmp_path,
+):
+    memory = ConversationMemory(
+        storage_path=tmp_path / "history.json"
+    )
+    personal_context = create_personal_context(tmp_path)
+    ai_client = InspectableFakeAIClient()
+
+    service = ConversationService(
+        ai_client=ai_client,
+        memory=memory,
+        personal_context=personal_context,
+        learning_mode=LearningMode.TEACHER,
+        learning_cycle=create_learning_cycle(tmp_path),
+    )
+
+    service.handle_message("Teach me")
+
+    assert "Active learning mode: TEACHER" in ai_client.instructions
+    assert "Adaptive Learning Cycle context" in (
+        ai_client.instructions
+    )
+
+
 def test_memory_can_clear_history(tmp_path):
     memory = ConversationMemory(
         storage_path=tmp_path / "history.json"
@@ -543,6 +783,7 @@ def create_daily_service(tmp_path, ai_client=None):
         ai_client=ai_client or InspectableFakeAIClient(),
         memory=memory,
         personal_context=personal_context,
+        learning_cycle=create_learning_cycle(tmp_path),
     )
 
 
@@ -809,6 +1050,7 @@ def test_daily_scheduler_triggers_morning_inside_window(tmp_path):
         ai_client.instructions
     )
     assert "Active learning mode: DAILY" in ai_client.instructions
+    assert "Adaptive Learning Cycle context" in ai_client.instructions
     assert "Category: MMORPG" in ai_client.messages[-1]["content"]
 
 
