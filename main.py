@@ -2,6 +2,7 @@ from threading import Lock
 
 from app.chat.service import ConversationService
 from app.daily import DailyScheduler, DailySchedulerRunner
+from app.presentation import AgentOutputPresenter
 from app.startup.bootstrap import bootstrap_app
 
 
@@ -23,6 +24,7 @@ def main() -> None:
     app = bootstrap_app()
     conversation = ConversationService()
     scheduler = DailyScheduler()
+    presenter = AgentOutputPresenter()
     conversation_lock = Lock()
 
     print(
@@ -38,7 +40,7 @@ def main() -> None:
     )
 
     def print_daily_result(result) -> None:
-        print(f"\nAgent: {result.response}")
+        presenter.show_agent_response(result.response)
 
     daily_runner = DailySchedulerRunner(
         scheduler=scheduler,
@@ -50,7 +52,9 @@ def main() -> None:
     daily_results = daily_runner.run_once()
 
     if not daily_results:
-        print("Agent: I'm here when you want to practice.")
+        presenter.show_agent_response(
+            "I'm here when you want to practice."
+        )
 
     daily_runner.start(run_immediately=False)
 
@@ -110,7 +114,7 @@ def main() -> None:
             with conversation_lock:
                 response = conversation.handle_message(message)
 
-            print(f"\nAgent: {response}")
+            presenter.show_agent_response(response)
 
     except KeyboardInterrupt:
         print("\n\nAgent: See you later, Airton!")

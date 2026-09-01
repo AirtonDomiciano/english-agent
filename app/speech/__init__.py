@@ -1,1 +1,12 @@
-"""Speech layer for voice interaction in later phases."""
+from app.speech.service import (
+    NullSpeechProvider,
+    SpeechProvider,
+    SpeechService,
+)
+
+
+__all__ = [
+    "NullSpeechProvider",
+    "SpeechProvider",
+    "SpeechService",
+]

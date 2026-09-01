@@ -106,6 +106,28 @@ A companion também possui uma camada para iniciativas espontâneas durante o di
 - `LEARNING_COMMITMENT` usa uma janela configurável perto das 15h e pode fazer follow-ups em 10, 30, 45 e 60 minutos.
 - Interações comuns respeitam períodos de silêncio e não insistem como a prática principal.
 
+### Text-to-Speech
+
+A saída da companion passa por um presenter central:
+
+- `app/presentation/agent_output.py` imprime a resposta e aciona TTS quando habilitado.
+- `app/speech/service.py` controla habilitação, falhas e serialização por lock para evitar duas falas simultâneas.
+- `app/speech/providers/espeak.py` é o provider inicial, usando `espeak` local no dispositivo de áudio padrão.
+
+No Debian, instale o provider local:
+
+```bash
+sudo apt install espeak
+```
+
+Configuração:
+
+- `ENGLISH_AGENT_TTS_ENABLED=true` habilita voz.
+- `ENGLISH_AGENT_TTS_ENABLED=false` ou ausente mantém apenas texto.
+- `ENGLISH_AGENT_TTS_PROVIDER=espeak` seleciona o provider atual.
+- `ENGLISH_AGENT_TTS_COMMAND=espeak` permite trocar o comando, por exemplo `espeak-ng`.
+- `ENGLISH_AGENT_TTS_TIMEOUT=30` controla o timeout de reprodução.
+
 ### Fase 2 — Voz
 - IA fala
 - Resposta por microfone
