@@ -128,6 +128,48 @@ Configuração:
 - `ENGLISH_AGENT_TTS_COMMAND=espeak` permite trocar o comando, por exemplo `espeak-ng`.
 - `ENGLISH_AGENT_TTS_TIMEOUT=30` controla o timeout de reprodução.
 
+### Speech-to-Text
+
+A entrada por voz fica separada da conversa:
+
+- `app/speech/recognition_service.py` coordena captura, habilitação, falhas e transcrição.
+- `app/speech/audio.py` captura uma frase do microfone usando `arecord` e salva um WAV temporário.
+- `app/speech/recognition_providers/openai_transcription.py` é o provider inicial, usando OpenAI transcription com modelo configurável.
+- `ConversationService` continua recebendo apenas texto; ele não conhece microfone nem provider de STT.
+- `AgentOutputPresenter` continua sendo o ponto central de saída, então a resposta transcrita também pode acionar TTS.
+
+No Debian, instale o capturador local:
+
+```bash
+sudo apt install alsa-utils
+```
+
+Configuração:
+
+- `ENGLISH_AGENT_STT_ENABLED=true` habilita o comando de voz.
+- `ENGLISH_AGENT_STT_ENABLED=false` ou ausente mantém apenas digitação.
+- `ENGLISH_AGENT_STT_PROVIDER=openai` seleciona o provider atual.
+- `ENGLISH_AGENT_STT_LANGUAGE=en` define o idioma esperado da fala.
+- `ENGLISH_AGENT_STT_MODEL=whisper-1` define o modelo de transcrição.
+- `ENGLISH_AGENT_STT_TIMEOUT=30` controla o timeout da chamada externa.
+- `ENGLISH_AGENT_STT_DURATION_SECONDS=5` controla o tempo de gravação de cada frase.
+- `ENGLISH_AGENT_STT_RECORD_COMMAND=arecord` permite trocar o comando de captura.
+- `ENGLISH_AGENT_STT_AUDIO_DIR=/tmp` permite trocar a pasta de áudio temporário.
+
+Para testar manualmente:
+
+```bash
+python main.py
+```
+
+Depois digite:
+
+```bash
+/voice
+```
+
+O agente mostra `Listening...`, grava uma frase, exibe a transcrição como `You: ...`, envia para a conversa e responde pelo fluxo normal de texto/TTS.
+
 ### Fase 2 — Voz
 - IA fala
 - Resposta por microfone

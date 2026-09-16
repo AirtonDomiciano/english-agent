@@ -3,6 +3,7 @@ from threading import Lock
 from app.chat.service import ConversationService
 from app.daily import DailyScheduler, DailySchedulerRunner
 from app.presentation import AgentOutputPresenter
+from app.speech import SpeechRecognitionService
 from app.startup.bootstrap import bootstrap_app
 
 
@@ -18,6 +19,7 @@ CLEAR_COMMANDS = {
 }
 
 MODE_COMMAND = "/mode"
+VOICE_COMMAND = "/voice"
 
 
 def main() -> None:
@@ -25,6 +27,7 @@ def main() -> None:
     conversation = ConversationService()
     scheduler = DailyScheduler()
     presenter = AgentOutputPresenter()
+    speech_recognition = SpeechRecognitionService.from_env()
     conversation_lock = Lock()
 
     print(
@@ -38,6 +41,7 @@ def main() -> None:
         "Type '/mode daily|teacher|conversation|vocabulary' "
         "to change learning mode.\n"
     )
+    print("Type '/voice' to speak one message.\n")
 
     def print_daily_result(result) -> None:
         presenter.show_agent_response(result.response)
@@ -109,6 +113,27 @@ def main() -> None:
                 except ValueError as error:
                     print(f"\nAgent: {error}")
 
+                continue
+
+            if normalized_message == VOICE_COMMAND:
+                print("\nListening...")
+                transcription = speech_recognition.listen_once()
+
+                if not transcription:
+                    print(
+                        "\nAgent: I couldn't hear anything usable. "
+                        "You can keep typing normally."
+                    )
+                    continue
+
+                print(f"\nYou: {transcription}")
+
+                with conversation_lock:
+                    response = conversation.handle_message(
+                        transcription
+                    )
+
+                presenter.show_agent_response(response)
                 continue
 
             with conversation_lock:
