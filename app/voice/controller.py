@@ -61,6 +61,17 @@ class VoiceConversationController:
     def is_busy(self) -> bool:
         return self.state is not VoiceState.IDLE
 
+    def can_start_turn(self) -> bool:
+        """Whether a new voice turn may start.
+
+        Future self-voice or echo detection can extend this gate
+        without changing wake-word or STT services.
+        """
+        return (
+            self.state is VoiceState.IDLE
+            and not self._session_lock.locked()
+        )
+
     def handle_voice_turn(self) -> VoiceTurnResult:
         if not self._session_lock.acquire(blocking=False):
             self._print(

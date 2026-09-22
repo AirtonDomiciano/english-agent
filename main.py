@@ -5,7 +5,7 @@ from app.daily import DailyScheduler, DailySchedulerRunner
 from app.presentation import AgentOutputPresenter
 from app.speech import SpeechRecognitionService
 from app.startup.bootstrap import bootstrap_app
-from app.voice import VoiceConversationController
+from app.voice import VoiceConversationController, WakeWordService
 
 
 EXIT_COMMANDS = {
@@ -36,6 +36,9 @@ def main() -> None:
         presenter=presenter,
         conversation_lock=conversation_lock,
     )
+    wake_word_service = WakeWordService.from_env(
+        controller=voice_conversation,
+    )
 
     print(
         f"English Agent initialized in phase: "
@@ -48,7 +51,13 @@ def main() -> None:
         "Type '/mode daily|teacher|conversation|vocabulary' "
         "to change learning mode.\n"
     )
-    print("Type '/voice' to speak one message.\n")
+    if wake_word_service.enabled:
+        print(
+            f'Say "{wake_word_service.wake_word}" or type /voice '
+            "to speak one message.\n"
+        )
+    else:
+        print("Type '/voice' to speak one message.\n")
 
     def print_daily_result(result) -> None:
         presenter.show_agent_response(result.response)
@@ -68,6 +77,7 @@ def main() -> None:
         )
 
     daily_runner.start(run_immediately=False)
+    wake_word_service.start()
 
     try:
         while True:
@@ -134,6 +144,7 @@ def main() -> None:
     except KeyboardInterrupt:
         print("\n\nAgent: See you later, Airton!")
     finally:
+        wake_word_service.stop()
         daily_runner.stop()
 
 

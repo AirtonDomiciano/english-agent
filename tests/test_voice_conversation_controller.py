@@ -125,6 +125,36 @@ def _build_controller(
     return controller, output, observed_states, speech_provider
 
 
+def test_controller_can_start_turn_only_when_idle():
+    controller = VoiceConversationController(
+        recognition=SpeechRecognitionService(
+            provider=RecordingRecognitionProvider(),
+            recorder=FailingAudioRecorder(),
+            enabled=True,
+        ),
+        conversation=RaisingConversationService(),
+        presenter=AgentOutputPresenter(
+            speech_service=SpeechService(
+                provider=RecordingSpeechProvider(),
+                enabled=False,
+            ),
+            output=StringIO(),
+        ),
+        output=StringIO(),
+    )
+
+    assert controller.can_start_turn() is True
+
+    controller.state = VoiceState.SPEAKING
+
+    assert controller.is_busy is True
+    assert controller.can_start_turn() is False
+
+    controller.state = VoiceState.LISTENING
+
+    assert controller.can_start_turn() is False
+
+
 def test_voice_turn_follows_idle_listening_transcribing_thinking_speaking_idle(
     tmp_path,
     conversation_service_factory,

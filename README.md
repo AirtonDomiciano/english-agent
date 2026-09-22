@@ -216,6 +216,50 @@ Depois digite:
 
 O agente mostra `Listening...`, grava uma frase, exibe a transcrição como `You: ...`, envia para a conversa e responde pelo fluxo normal de texto/TTS.
 
+`/voice` continua disponível como fallback manual mesmo com wake word habilitada.
+
+### Wake Word
+
+A espera por wake word fica fora do turno de voz:
+
+- `app/voice/wake_word.py` observa o microfone em background e, ao detectar a palavra, chama `VoiceConversationController.handle_voice_turn()`.
+- `app/voice/wake_word_providers/openwakeword.py` usa [openWakeWord](https://github.com/dscripka/openWakeWord) em modo ONNX, localmente, sem Whisper/OpenAI contínuo.
+- O provider pode ser trocado; `main.py` não importa a biblioteca de detecção.
+- A detecção só inicia um turno se o controller estiver `IDLE`. Enquanto estiver `SPEAKING` ou ocupado, a wake word é ignorada.
+- Não há escuta contínua da conversa depois da resposta: o fluxo volta a aguardar a wake word.
+
+A wake word é configurável. Não hardcodar o nome da companion no código.
+
+No Debian:
+
+```bash
+sudo apt install alsa-utils
+pip install -r requirements.txt
+pip install openwakeword==0.6.0 --no-deps
+```
+
+O `--no-deps` é necessário no Python 3.13 porque o `tflite-runtime` pedido pelo openWakeWord não tem wheel. O projeto usa ONNX (`onnxruntime`).
+
+Configuração:
+
+- `ENGLISH_AGENT_WAKE_WORD_ENABLED=true` habilita a espera em background.
+- `ENGLISH_AGENT_WAKE_WORD_ENABLED=false` ou ausente mantém só `/voice`.
+- `ENGLISH_AGENT_WAKE_WORD=hey jarvis` seleciona a frase/modelo.
+- `ENGLISH_AGENT_WAKE_WORD_PROVIDER=openwakeword` seleciona o provider atual.
+- `ENGLISH_AGENT_WAKE_WORD_THRESHOLD=0.5` ajusta a sensibilidade.
+- `ENGLISH_AGENT_WAKE_WORD_MODEL=/caminho/modelo.onnx` permite um modelo customizado.
+- `ENGLISH_AGENT_WAKE_WORD_RECORD_COMMAND=arecord` captura o stream local no dispositivo padrão.
+
+Modelos pré-treinados: `hey jarvis`, `hey mycroft`, `alexa`, `hey rhasspy`.
+
+Para testar:
+
+```bash
+python main.py
+```
+
+Diga `hey jarvis`. O agente entra em `Listening...` e segue o turno normal de voz. `/voice` continua funcionando.
+
 ### Fase 2 — Voz
 - IA fala
 - Resposta por microfone
