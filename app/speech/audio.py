@@ -7,7 +7,7 @@ from typing import Protocol
 
 
 DEFAULT_ARECORD_COMMAND = "arecord"
-DEFAULT_APLAY_COMMAND = "aplay"
+DEFAULT_APLAY_COMMAND = "aplay -q"
 DEFAULT_STT_DURATION_SECONDS = 5
 DEFAULT_STT_SAMPLE_RATE = 16000
 DEFAULT_STT_CHANNELS = 1
@@ -150,6 +150,8 @@ class AudioFilePlayer:
             ],
             check=True,
             timeout=self.timeout_seconds,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
         )
 
 

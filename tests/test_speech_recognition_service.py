@@ -192,6 +192,21 @@ def test_stt_microphone_error_returns_none_without_crashing():
     assert str(errors[0]) == "microphone unavailable"
 
 
+def test_capture_audio_leaves_file_for_the_caller(tmp_path):
+    audio_path = tmp_path / "voice.wav"
+    service = SpeechRecognitionService(
+        provider=RecordingRecognitionProvider(),
+        recorder=FakeAudioRecorder(audio_path),
+        enabled=True,
+    )
+
+    captured_path = service.capture_audio()
+
+    assert captured_path == audio_path
+    assert captured_path.exists()
+    assert service.provider.calls == []
+
+
 def test_stt_empty_audio_does_not_call_provider(tmp_path):
     provider = RecordingRecognitionProvider()
     service = SpeechRecognitionService(

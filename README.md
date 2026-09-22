@@ -1,3 +1,7 @@
+run this project.
+source .venv/bin/activate
+python main.py
+
 # English Agent
 
 Este projeto nasce como um agente de inglês, mas foi pensado para evoluir em direção a um assistente pessoal.
@@ -151,7 +155,7 @@ Configuração:
 - `ENGLISH_AGENT_TTS_MODEL=gpt-4o-mini-tts` define o modelo neural.
 - `ENGLISH_AGENT_TTS_VOICE=coral` define a voz do provider OpenAI.
 - `ENGLISH_AGENT_TTS_COMMAND=espeak` permite trocar o comando do eSpeak, por exemplo `espeak-ng`.
-- `ENGLISH_AGENT_TTS_PLAY_COMMAND=aplay` reproduz o arquivo gerado no dispositivo padrão, sem hardcode de saída.
+- `ENGLISH_AGENT_TTS_PLAY_COMMAND=aplay -q` reproduz o arquivo gerado no dispositivo padrão, sem hardcode de saída e sem mensagens técnicas do player.
 - `ENGLISH_AGENT_TTS_TIMEOUT=30` controla o timeout de geração e reprodução.
 
 Para testar:
@@ -172,7 +176,9 @@ ENGLISH_AGENT_TTS_PROVIDER=espeak
 
 A entrada por voz fica separada da conversa:
 
-- `app/speech/recognition_service.py` coordena captura, habilitação, falhas e transcrição.
+- `app/voice/controller.py` orquestra um turno `/voice` com estado explícito: `IDLE` → `LISTENING` → `TRANSCRIBING` → `THINKING` → `SPEAKING` → `IDLE`.
+- Enquanto o agente está em `SPEAKING`, ele não entra em `LISTENING`. Uma segunda sessão de voz é recusada até o turno voltar para `IDLE`.
+- `app/speech/recognition_service.py` continua responsável só por captura e transcrição.
 - `app/speech/audio.py` captura uma frase do microfone usando `arecord` e salva um WAV temporário.
 - `app/speech/recognition_providers/openai_transcription.py` é o provider inicial, usando OpenAI transcription com modelo configurável.
 - `ConversationService` continua recebendo apenas texto; ele não conhece microfone nem provider de STT.

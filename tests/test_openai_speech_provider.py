@@ -1,3 +1,4 @@
+import subprocess
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -164,25 +165,29 @@ def test_audio_file_player_uses_default_device_command(
 ):
     played = {}
 
-    def fake_run(command, check, timeout):
+    def fake_run(command, check, timeout, stdout=None, stderr=None):
         played["command"] = command
         played["check"] = check
         played["timeout"] = timeout
+        played["stdout"] = stdout
+        played["stderr"] = stderr
 
     monkeypatch.setattr("app.speech.audio.subprocess.run", fake_run)
     audio_path = tmp_path / "speech.wav"
     audio_path.write_bytes(b"wav")
     player = AudioFilePlayer(
-        command=("aplay",),
+        command=("aplay", "-q"),
         timeout_seconds=12,
     )
 
     player.play(audio_path)
 
-    assert played["command"] == ["aplay", str(audio_path)]
+    assert played["command"] == ["aplay", "-q", str(audio_path)]
     assert "-D" not in played["command"]
     assert played["check"] is True
     assert played["timeout"] == 12
+    assert played["stdout"] is subprocess.DEVNULL
+    assert played["stderr"] is subprocess.DEVNULL
 
 
 def test_openai_from_env_reads_voice_and_model(monkeypatch):

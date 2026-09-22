@@ -5,6 +5,7 @@ from app.daily import DailyScheduler, DailySchedulerRunner
 from app.presentation import AgentOutputPresenter
 from app.speech import SpeechRecognitionService
 from app.startup.bootstrap import bootstrap_app
+from app.voice import VoiceConversationController
 
 
 EXIT_COMMANDS = {
@@ -29,6 +30,12 @@ def main() -> None:
     presenter = AgentOutputPresenter()
     speech_recognition = SpeechRecognitionService.from_env()
     conversation_lock = Lock()
+    voice_conversation = VoiceConversationController(
+        recognition=speech_recognition,
+        conversation=conversation,
+        presenter=presenter,
+        conversation_lock=conversation_lock,
+    )
 
     print(
         f"English Agent initialized in phase: "
@@ -116,24 +123,7 @@ def main() -> None:
                 continue
 
             if normalized_message == VOICE_COMMAND:
-                print("\nListening...")
-                transcription = speech_recognition.listen_once()
-
-                if not transcription:
-                    print(
-                        "\nAgent: I couldn't hear anything usable. "
-                        "You can keep typing normally."
-                    )
-                    continue
-
-                print(f"\nYou: {transcription}")
-
-                with conversation_lock:
-                    response = conversation.handle_message(
-                        transcription
-                    )
-
-                presenter.show_agent_response(response)
+                voice_conversation.handle_voice_turn()
                 continue
 
             with conversation_lock:

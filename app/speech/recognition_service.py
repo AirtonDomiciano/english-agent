@@ -70,7 +70,7 @@ class SpeechRecognitionService:
             error_handler=error_handler,
         )
 
-    def listen_once(self) -> str | None:
+    def capture_audio(self) -> Path | None:
         if not self.enabled:
             return None
 
@@ -88,10 +88,25 @@ class SpeechRecognitionService:
                 not audio_path.exists()
                 or audio_path.stat().st_size == 0
             ):
+                audio_path.unlink(missing_ok=True)
                 return None
 
+            return audio_path
+        except Exception as error:
+            if audio_path:
+                Path(audio_path).unlink(missing_ok=True)
+
+            self.error_handler(error)
+
+            return None
+
+    def transcribe_audio(self, audio_path: Path) -> str | None:
+        if not self.enabled:
+            return None
+
+        try:
             transcription = self.provider.transcribe(
-                audio_path=audio_path,
+                audio_path=Path(audio_path),
                 language=self.language,
             )
             cleaned_transcription = str(transcription or "").strip()
@@ -101,6 +116,17 @@ class SpeechRecognitionService:
             self.error_handler(error)
 
             return None
+
+    def listen_once(self) -> str | None:
+        audio_path = None
+
+        try:
+            audio_path = self.capture_audio()
+
+            if not audio_path:
+                return None
+
+            return self.transcribe_audio(audio_path)
         finally:
             if audio_path:
                 Path(audio_path).unlink(missing_ok=True)
