@@ -112,21 +112,61 @@ A saída da companion passa por um presenter central:
 
 - `app/presentation/agent_output.py` imprime a resposta e aciona TTS quando habilitado.
 - `app/speech/service.py` controla habilitação, falhas e serialização por lock para evitar duas falas simultâneas.
-- `app/speech/providers/espeak.py` é o provider inicial, usando `espeak` local no dispositivo de áudio padrão.
+- `app/speech/providers/openai_tts.py` é o provider neural, usando OpenAI TTS (`gpt-4o-mini-tts`) e o dispositivo de áudio padrão.
+- `app/speech/providers/espeak.py` permanece disponível como provider local e fallback automático.
 
-No Debian, instale o provider local:
+A resposta continua aparecendo no terminal e depois é falada. Falha no TTS não interrompe a conversa. Se o provider neural falhar, o agente tenta o eSpeak.
+
+No Debian, instale o player local e o fallback:
 
 ```bash
-sudo apt install espeak
+sudo apt install alsa-utils espeak
 ```
+
+Selecionar o provider:
+
+```bash
+ENGLISH_AGENT_TTS_PROVIDER=openai
+```
+
+```bash
+ENGLISH_AGENT_TTS_PROVIDER=espeak
+```
+
+Selecionar voz e modelo do provider neural:
+
+```bash
+ENGLISH_AGENT_TTS_MODEL=gpt-4o-mini-tts
+ENGLISH_AGENT_TTS_VOICE=coral
+```
+
+Vozes comuns: `coral`, `nova`, `alloy`, `sage`, `marin`, `cedar`.
 
 Configuração:
 
 - `ENGLISH_AGENT_TTS_ENABLED=true` habilita voz.
 - `ENGLISH_AGENT_TTS_ENABLED=false` ou ausente mantém apenas texto.
-- `ENGLISH_AGENT_TTS_PROVIDER=espeak` seleciona o provider atual.
-- `ENGLISH_AGENT_TTS_COMMAND=espeak` permite trocar o comando, por exemplo `espeak-ng`.
-- `ENGLISH_AGENT_TTS_TIMEOUT=30` controla o timeout de reprodução.
+- `ENGLISH_AGENT_TTS_PROVIDER=openai` seleciona a voz neural.
+- `ENGLISH_AGENT_TTS_PROVIDER=espeak` volta para o eSpeak.
+- `ENGLISH_AGENT_TTS_MODEL=gpt-4o-mini-tts` define o modelo neural.
+- `ENGLISH_AGENT_TTS_VOICE=coral` define a voz do provider OpenAI.
+- `ENGLISH_AGENT_TTS_COMMAND=espeak` permite trocar o comando do eSpeak, por exemplo `espeak-ng`.
+- `ENGLISH_AGENT_TTS_PLAY_COMMAND=aplay` reproduz o arquivo gerado no dispositivo padrão, sem hardcode de saída.
+- `ENGLISH_AGENT_TTS_TIMEOUT=30` controla o timeout de geração e reprodução.
+
+Para testar:
+
+```bash
+python main.py
+```
+
+Envie uma mensagem. O texto aparece no terminal e, em seguida, a resposta é falada.
+
+Para voltar ao eSpeak:
+
+```bash
+ENGLISH_AGENT_TTS_PROVIDER=espeak
+```
 
 ### Speech-to-Text
 

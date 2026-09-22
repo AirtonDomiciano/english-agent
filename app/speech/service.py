@@ -66,6 +66,24 @@ class NullSpeechProvider:
         return None
 
 
+class FallbackSpeechProvider:
+    """Tries a primary provider and falls back without aborting speech."""
+
+    def __init__(
+        self,
+        primary: SpeechProvider,
+        fallback: SpeechProvider,
+    ) -> None:
+        self.primary = primary
+        self.fallback = fallback
+
+    def speak(self, text: str) -> None:
+        try:
+            self.primary.speak(text)
+        except Exception:
+            self.fallback.speak(text)
+
+
 def _env_flag(name: str) -> bool:
     return os.getenv(name, "").strip().lower() in {
         "1",
@@ -80,6 +98,15 @@ def _provider_from_env() -> SpeechProvider:
         "ENGLISH_AGENT_TTS_PROVIDER",
         "espeak",
     ).strip().lower()
+
+    if provider_name == "openai":
+        from app.speech.providers.espeak import EspeakSpeechProvider
+        from app.speech.providers.openai_tts import OpenAISpeechProvider
+
+        return FallbackSpeechProvider(
+            primary=OpenAISpeechProvider.from_env(),
+            fallback=EspeakSpeechProvider.from_env(),
+        )
 
     if provider_name == "espeak":
         from app.speech.providers.espeak import EspeakSpeechProvider

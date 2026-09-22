@@ -7,9 +7,11 @@ from typing import Protocol
 
 
 DEFAULT_ARECORD_COMMAND = "arecord"
+DEFAULT_APLAY_COMMAND = "aplay"
 DEFAULT_STT_DURATION_SECONDS = 5
 DEFAULT_STT_SAMPLE_RATE = 16000
 DEFAULT_STT_CHANNELS = 1
+DEFAULT_TTS_PLAY_TIMEOUT_SECONDS = 30
 
 
 class AudioRecorder(Protocol):
@@ -103,6 +105,52 @@ class ArecordMicrophoneRecorder:
 class NullAudioRecorder:
     def record(self) -> Path | None:
         return None
+
+
+class AudioPlayer(Protocol):
+    def play(self, audio_path: Path) -> None:
+        """Play a local audio file on the default output device."""
+
+
+class AudioFilePlayer:
+    """Plays generated speech files without selecting an output device."""
+
+    def __init__(
+        self,
+        command: tuple[str, ...] | None = None,
+        timeout_seconds: int = DEFAULT_TTS_PLAY_TIMEOUT_SECONDS,
+    ) -> None:
+        self.command = command or (DEFAULT_APLAY_COMMAND,)
+        self.timeout_seconds = timeout_seconds
+
+    @classmethod
+    def from_env(cls) -> "AudioFilePlayer":
+        command = tuple(
+            shlex.split(
+                os.getenv(
+                    "ENGLISH_AGENT_TTS_PLAY_COMMAND",
+                    DEFAULT_APLAY_COMMAND,
+                )
+            )
+        )
+
+        return cls(
+            command=command,
+            timeout_seconds=_env_int(
+                "ENGLISH_AGENT_TTS_TIMEOUT",
+                DEFAULT_TTS_PLAY_TIMEOUT_SECONDS,
+            ),
+        )
+
+    def play(self, audio_path: Path) -> None:
+        subprocess.run(
+            [
+                *self.command,
+                str(audio_path),
+            ],
+            check=True,
+            timeout=self.timeout_seconds,
+        )
 
 
 def _env_int(name: str, default: int) -> int:
