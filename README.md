@@ -225,11 +225,12 @@ O agente mostra `Listening...`, grava uma frase, exibe a transcrição como `You
 
 A espera por wake word fica fora do turno de voz:
 
-- `app/voice/wake_word.py` observa o microfone em background e, ao detectar a palavra, chama `VoiceConversationController.handle_voice_turn()`.
+- `app/voice/wake_word.py` observa o microfone em background e, ao detectar a palavra, inicia uma `VoiceConversationSession`.
+- `app/voice/session.py` mantém a sessão `ACTIVE` e reutiliza o `VoiceConversationController` para vários turnos, sem exigir wake word de novo.
+- A sessão termina por silêncio (`ENGLISH_AGENT_VOICE_SESSION_TIMEOUT_SECONDS`) ou por frase de despedida (`bye`, `goodbye`, `see you later`, `that's all`).
 - `app/voice/wake_word_providers/openwakeword.py` usa [openWakeWord](https://github.com/dscripka/openWakeWord) em modo ONNX, localmente, sem Whisper/OpenAI contínuo.
 - O provider pode ser trocado; `main.py` não importa a biblioteca de detecção.
-- A detecção só inicia um turno se o controller estiver `IDLE`. Enquanto estiver `SPEAKING` ou ocupado, a wake word é ignorada.
-- Não há escuta contínua da conversa depois da resposta: o fluxo volta a aguardar a wake word.
+- Wake word só inicia sessão se nenhuma outra estiver ativa. `/voice` continua sendo um único turno.
 
 A wake word é configurável. Não hardcodar o nome da companion no código.
 
@@ -252,6 +253,7 @@ Configuração:
 - `ENGLISH_AGENT_WAKE_WORD_THRESHOLD=0.5` ajusta a sensibilidade.
 - `ENGLISH_AGENT_WAKE_WORD_MODEL=/caminho/modelo.onnx` é obrigatório para frases customizadas.
 - `ENGLISH_AGENT_WAKE_WORD_RECORD_COMMAND=arecord` captura o stream local no dispositivo padrão.
+- `ENGLISH_AGENT_VOICE_SESSION_TIMEOUT_SECONDS=15` encerra a sessão após esse tempo de inatividade entre turnos, não o tempo total da conversa.
 
 O openWakeWord **não reconhece uma frase nova só pelo texto**. Os modelos prontos são `hey jarvis`, `hey mycroft`, `alexa` e `hey rhasspy`. `pran` precisa de um modelo ONNX/TFLite treinado.
 
@@ -281,7 +283,7 @@ Com o modelo de `pran` configurado:
 python main.py
 ```
 
-Diga `pran`. O agente entra em `Listening...` e segue o turno normal de voz. `/voice` continua funcionando.
+Diga `pran`. O agente inicia uma sessão de voz, entra em `Listening...` e continua ouvindo após cada resposta até silêncio ou despedida. `/voice` continua sendo um único turno.
 
 ### Fase 2 — Voz
 - IA fala

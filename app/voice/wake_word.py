@@ -4,6 +4,7 @@ from threading import Event, Thread
 from typing import Callable, Protocol, TextIO
 
 from app.voice.controller import VoiceConversationController
+from app.voice.session import VoiceConversationSession
 
 
 DEFAULT_WAKE_WORD = "pran"
@@ -40,12 +41,13 @@ class NullWakeWordDetector:
 
 
 class WakeWordService:
-    """Listens for a local wake word and starts one voice turn when idle."""
+    """Listens for a local wake word and starts a voice session when idle."""
 
     def __init__(
         self,
         controller: VoiceConversationController,
         detector: WakeWordDetector | None = None,
+        session: VoiceConversationSession | None = None,
         enabled: bool = False,
         wake_word: str = DEFAULT_WAKE_WORD,
         error_handler: Callable[[Exception], None] | None = None,
@@ -53,6 +55,7 @@ class WakeWordService:
     ) -> None:
         self.controller = controller
         self.detector = detector or NullWakeWordDetector()
+        self.session = session
         self.enabled = enabled
         self.wake_word = wake_word
         self.error_handler = error_handler or self._default_error_handler
@@ -65,6 +68,7 @@ class WakeWordService:
         cls,
         controller: VoiceConversationController,
         detector: WakeWordDetector | None = None,
+        session: VoiceConversationSession | None = None,
         error_handler: Callable[[Exception], None] | None = None,
         output: TextIO | None = None,
     ) -> "WakeWordService":
@@ -78,6 +82,7 @@ class WakeWordService:
             return cls(
                 controller=controller,
                 detector=detector or NullWakeWordDetector(),
+                session=session,
                 enabled=False,
                 wake_word=wake_word,
                 error_handler=error_handler,
@@ -98,6 +103,7 @@ class WakeWordService:
         service = cls(
             controller=controller,
             detector=selected_detector,
+            session=session,
             enabled=enabled,
             wake_word=wake_word,
             error_handler=error_handler,
@@ -125,6 +131,10 @@ class WakeWordService:
 
     def stop(self) -> None:
         self._stop_event.set()
+
+        if self.session is not None:
+            self.session.stop()
+
         self.detector.close()
 
         if self._thread:
@@ -146,13 +156,23 @@ class WakeWordService:
             if not detected or self._stop_event.is_set():
                 continue
 
-            if not self.controller.can_start_turn():
-                continue
-
             try:
-                self.controller.handle_voice_turn()
+                self._start_conversation()
             except Exception as error:
                 self.error_handler(error)
+
+    def _start_conversation(self) -> None:
+        if self.session is not None:
+            if not self.session.can_start():
+                return
+
+            self.session.run()
+            return
+
+        if not self.controller.can_start_turn():
+            return
+
+        self.controller.handle_voice_turn()
 
     def _default_error_handler(self, error: Exception) -> None:
         print(

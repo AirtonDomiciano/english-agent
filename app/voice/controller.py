@@ -9,6 +9,7 @@ from app.chat.service import ConversationService
 from app.presentation import AgentOutputPresenter
 from app.speech import SpeechRecognitionService
 from app.voice.self_voice import SelfVoiceDetector
+from app.voice.session_end import is_voice_session_end
 
 
 class VoiceState(str, Enum):
@@ -33,6 +34,8 @@ class VoiceTurnResult:
     accepted: bool
     transcription: str | None = None
     response: str | None = None
+    heard_user: bool = False
+    ended_session: bool = False
 
 
 class VoiceConversationController:
@@ -75,7 +78,10 @@ class VoiceConversationController:
             and not self._session_lock.locked()
         )
 
-    def handle_voice_turn(self) -> VoiceTurnResult:
+    def handle_voice_turn(
+        self,
+        announce_empty: bool = True,
+    ) -> VoiceTurnResult:
         if not self._session_lock.acquire(blocking=False):
             self._print(
                 "\nAgent: Please wait until I finish speaking."
@@ -83,15 +89,20 @@ class VoiceConversationController:
             return VoiceTurnResult(accepted=False)
 
         try:
-            return self._run_turn()
+            return self._run_turn(announce_empty=announce_empty)
         finally:
             try:
                 self._set_state(VoiceState.IDLE)
             finally:
                 self._session_lock.release()
 
-    def _run_turn(self) -> VoiceTurnResult:
+    def _run_turn(
+        self,
+        announce_empty: bool = True,
+    ) -> VoiceTurnResult:
         audio_path = None
+        transcription = None
+        heard_user = False
 
         try:
             self._set_state(VoiceState.LISTENING)
@@ -99,7 +110,9 @@ class VoiceConversationController:
             audio_path = self.recognition.capture_audio()
 
             if not audio_path:
-                self._print_unusable_audio()
+                if announce_empty:
+                    self._print_unusable_audio()
+
                 return VoiceTurnResult(accepted=True)
 
             self._set_state(VoiceState.TRANSCRIBING)
@@ -108,7 +121,9 @@ class VoiceConversationController:
             )
 
             if not transcription:
-                self._print_unusable_audio()
+                if announce_empty:
+                    self._print_unusable_audio()
+
                 return VoiceTurnResult(accepted=True)
 
             if (
@@ -122,6 +137,17 @@ class VoiceConversationController:
                     transcription=transcription,
                 )
 
+            if is_voice_session_end(transcription):
+                self._print(f"\nYou: {transcription}")
+
+                return VoiceTurnResult(
+                    accepted=True,
+                    transcription=transcription,
+                    heard_user=True,
+                    ended_session=True,
+                )
+
+            heard_user = True
             self._print(f"\nYou: {transcription}")
             self._set_state(VoiceState.THINKING)
 
@@ -143,9 +169,14 @@ class VoiceConversationController:
                 accepted=True,
                 transcription=transcription,
                 response=response,
+                heard_user=True,
             )
         except Exception:
-            return VoiceTurnResult(accepted=True)
+            return VoiceTurnResult(
+                accepted=True,
+                transcription=transcription,
+                heard_user=heard_user,
+            )
         finally:
             if audio_path:
                 Path(audio_path).unlink(missing_ok=True)

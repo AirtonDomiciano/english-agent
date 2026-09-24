@@ -8,6 +8,7 @@ from app.startup.bootstrap import bootstrap_app
 from app.voice import (
     SelfVoiceDetector,
     VoiceConversationController,
+    VoiceConversationSession,
     WakeWordService,
 )
 
@@ -44,8 +45,12 @@ def main() -> None:
         conversation_lock=conversation_lock,
         self_voice_detector=self_voice_detector,
     )
+    voice_session = VoiceConversationSession.from_env(
+        controller=voice_conversation,
+    )
     wake_word_service = WakeWordService.from_env(
         controller=voice_conversation,
+        session=voice_session,
     )
 
     print(
@@ -61,8 +66,9 @@ def main() -> None:
     )
     if wake_word_service.enabled:
         print(
-            f'Say "{wake_word_service.wake_word}" or type /voice '
-            "to speak one message.\n"
+            f'Say "{wake_word_service.wake_word}" to start a '
+            "voice conversation, or type /voice "
+            "for one message.\n"
         )
     else:
         print("Type '/voice' to speak one message.\n")
@@ -141,7 +147,13 @@ def main() -> None:
                 continue
 
             if normalized_message == VOICE_COMMAND:
-                voice_conversation.handle_voice_turn()
+                if voice_session.is_active:
+                    print(
+                        "\nAgent: Please wait until I finish speaking."
+                    )
+                else:
+                    voice_conversation.handle_voice_turn()
+
                 continue
 
             with conversation_lock:
@@ -152,6 +164,7 @@ def main() -> None:
     except KeyboardInterrupt:
         print("\n\nAgent: See you later, Airton!")
     finally:
+        voice_session.stop()
         wake_word_service.stop()
         daily_runner.stop()
 
