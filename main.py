@@ -5,7 +5,11 @@ from app.daily import DailyScheduler, DailySchedulerRunner
 from app.presentation import AgentOutputPresenter
 from app.speech import SpeechRecognitionService
 from app.startup.bootstrap import bootstrap_app
-from app.voice import VoiceConversationController, WakeWordService
+from app.voice import (
+    SelfVoiceDetector,
+    VoiceConversationController,
+    WakeWordService,
+)
 
 
 EXIT_COMMANDS = {
@@ -27,7 +31,10 @@ def main() -> None:
     app = bootstrap_app()
     conversation = ConversationService()
     scheduler = DailyScheduler()
-    presenter = AgentOutputPresenter()
+    self_voice_detector = SelfVoiceDetector.from_env()
+    presenter = AgentOutputPresenter(
+        self_voice_detector=self_voice_detector,
+    )
     speech_recognition = SpeechRecognitionService.from_env()
     conversation_lock = Lock()
     voice_conversation = VoiceConversationController(
@@ -35,6 +42,7 @@ def main() -> None:
         conversation=conversation,
         presenter=presenter,
         conversation_lock=conversation_lock,
+        self_voice_detector=self_voice_detector,
     )
     wake_word_service = WakeWordService.from_env(
         controller=voice_conversation,

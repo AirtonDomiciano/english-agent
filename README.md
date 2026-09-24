@@ -178,6 +178,7 @@ A entrada por voz fica separada da conversa:
 
 - `app/voice/controller.py` orquestra um turno `/voice` com estado explícito: `IDLE` → `LISTENING` → `TRANSCRIBING` → `THINKING` → `SPEAKING` → `IDLE`.
 - Enquanto o agente está em `SPEAKING`, ele não entra em `LISTENING`. Uma segunda sessão de voz é recusada até o turno voltar para `IDLE`.
+- `app/voice/self_voice.py` guarda o último texto efetivamente falado e ignora transcrições muito parecidas numa janela curta, para não tratar eco do TTS como fala do usuário.
 - `app/speech/recognition_service.py` continua responsável só por captura e transcrição.
 - `app/speech/audio.py` captura uma frase do microfone usando `arecord` e salva um WAV temporário.
 - `app/speech/recognition_providers/openai_transcription.py` é o provider inicial, usando OpenAI transcription com modelo configurável.
@@ -201,6 +202,8 @@ Configuração:
 - `ENGLISH_AGENT_STT_DURATION_SECONDS=5` controla o tempo de gravação de cada frase.
 - `ENGLISH_AGENT_STT_RECORD_COMMAND=arecord` permite trocar o comando de captura.
 - `ENGLISH_AGENT_STT_AUDIO_DIR=/tmp` permite trocar a pasta de áudio temporário.
+- `ENGLISH_AGENT_SELF_VOICE_WINDOW_SECONDS=8` limita por quanto tempo o eco do TTS ainda é ignorado.
+- `ENGLISH_AGENT_SELF_VOICE_SIMILARITY_THRESHOLD=0.85` define quão parecida a transcrição precisa ser para ser tratada como self-voice.
 
 Para testar manualmente:
 

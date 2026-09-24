@@ -8,6 +8,7 @@ from typing import Callable, TextIO
 from app.chat.service import ConversationService
 from app.presentation import AgentOutputPresenter
 from app.speech import SpeechRecognitionService
+from app.voice.self_voice import SelfVoiceDetector
 
 
 class VoiceState(str, Enum):
@@ -47,6 +48,7 @@ class VoiceConversationController:
         on_state_change: (
             Callable[[VoiceState, VoiceState], None] | None
         ) = None,
+        self_voice_detector: SelfVoiceDetector | None = None,
     ) -> None:
         self.recognition = recognition
         self.conversation = conversation
@@ -54,6 +56,7 @@ class VoiceConversationController:
         self.conversation_lock = conversation_lock
         self.output = output
         self.on_state_change = on_state_change
+        self.self_voice_detector = self_voice_detector
         self.state = VoiceState.IDLE
         self._session_lock = Lock()
 
@@ -107,6 +110,17 @@ class VoiceConversationController:
             if not transcription:
                 self._print_unusable_audio()
                 return VoiceTurnResult(accepted=True)
+
+            if (
+                self.self_voice_detector is not None
+                and self.self_voice_detector.is_probable_self_voice(
+                    transcription
+                )
+            ):
+                return VoiceTurnResult(
+                    accepted=True,
+                    transcription=transcription,
+                )
 
             self._print(f"\nYou: {transcription}")
             self._set_state(VoiceState.THINKING)

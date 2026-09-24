@@ -94,6 +94,7 @@ def _build_controller(
     conversation=None,
     on_state_change=None,
     enabled: bool = True,
+    self_voice_detector=None,
 ):
     output = StringIO()
     observed_states = []
@@ -111,6 +112,7 @@ def _build_controller(
             enabled=True,
         ),
         output=output,
+        self_voice_detector=self_voice_detector,
     )
     controller = VoiceConversationController(
         recognition=recognition,
@@ -120,6 +122,7 @@ def _build_controller(
         on_state_change=on_state_change or (
             lambda _previous, current: observed_states.append(current)
         ),
+        self_voice_detector=self_voice_detector,
     )
 
     return controller, output, observed_states, speech_provider
