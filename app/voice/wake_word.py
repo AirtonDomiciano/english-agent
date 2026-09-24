@@ -6,7 +6,7 @@ from typing import Callable, Protocol, TextIO
 from app.voice.controller import VoiceConversationController
 
 
-DEFAULT_WAKE_WORD = "hey jarvis"
+DEFAULT_WAKE_WORD = "pran"
 DEFAULT_WAKE_WORD_PROVIDER = "openwakeword"
 DEFAULT_WAKE_WORD_THRESHOLD = 0.5
 

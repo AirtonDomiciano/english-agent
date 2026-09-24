@@ -244,21 +244,41 @@ Configuração:
 
 - `ENGLISH_AGENT_WAKE_WORD_ENABLED=true` habilita a espera em background.
 - `ENGLISH_AGENT_WAKE_WORD_ENABLED=false` ou ausente mantém só `/voice`.
-- `ENGLISH_AGENT_WAKE_WORD=hey jarvis` seleciona a frase/modelo.
+- `ENGLISH_AGENT_WAKE_WORD=pran` seleciona a frase falada. O padrão do projeto é `pran`.
 - `ENGLISH_AGENT_WAKE_WORD_PROVIDER=openwakeword` seleciona o provider atual.
 - `ENGLISH_AGENT_WAKE_WORD_THRESHOLD=0.5` ajusta a sensibilidade.
-- `ENGLISH_AGENT_WAKE_WORD_MODEL=/caminho/modelo.onnx` permite um modelo customizado.
+- `ENGLISH_AGENT_WAKE_WORD_MODEL=/caminho/modelo.onnx` é obrigatório para frases customizadas.
 - `ENGLISH_AGENT_WAKE_WORD_RECORD_COMMAND=arecord` captura o stream local no dispositivo padrão.
 
-Modelos pré-treinados: `hey jarvis`, `hey mycroft`, `alexa`, `hey rhasspy`.
+O openWakeWord **não reconhece uma frase nova só pelo texto**. Os modelos prontos são `hey jarvis`, `hey mycroft`, `alexa` e `hey rhasspy`. `pran` precisa de um modelo ONNX/TFLite treinado.
 
-Para testar:
+Como treinar o modelo de `pran`:
+
+1. Use o notebook oficial do openWakeWord ([Colab](https://colab.research.google.com/drive/1q1oe2zOyZp7UsB3jJiQ1IFn8z5YfjwEb) ou `notebooks/automatic_model_training.ipynb`).
+2. Gere o modelo da frase `pran` (saída `.onnx` ou `.tflite`).
+3. Salve o arquivo, por exemplo em `data/wake_words/pran.onnx`.
+4. Configure só o `.env`:
+
+```bash
+ENGLISH_AGENT_WAKE_WORD=pran
+ENGLISH_AGENT_WAKE_WORD_MODEL=data/wake_words/pran.onnx
+```
+
+Sem esse arquivo, a wake word é desligada com erro claro e o `/voice` continua funcionando. Não use um modelo de outra palavra no lugar.
+
+Para testar com um modelo pronto, enquanto o de `pran` não existir:
+
+```bash
+ENGLISH_AGENT_WAKE_WORD=hey jarvis
+```
+
+Com o modelo de `pran` configurado:
 
 ```bash
 python main.py
 ```
 
-Diga `hey jarvis`. O agente entra em `Listening...` e segue o turno normal de voz. `/voice` continua funcionando.
+Diga `pran`. O agente entra em `Listening...` e segue o turno normal de voz. `/voice` continua funcionando.
 
 ### Fase 2 — Voz
 - IA fala

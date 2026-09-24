@@ -13,6 +13,7 @@ from app.voice import (
 from app.voice.wake_word_providers.openwakeword import (
     ArecordFrameSource,
     OpenWakeWordDetector,
+    _resolve_wake_word_model,
 )
 
 
@@ -194,7 +195,7 @@ def test_wake_word_starts_a_voice_turn(
         controller=controller,
         detector=detector,
         enabled=True,
-        wake_word="hey jarvis",
+        wake_word="pran",
     )
 
     service.start()
@@ -474,10 +475,11 @@ def test_voice_command_works_independently_of_wake_word(
 def test_openwakeword_detector_starts_turn_signal_without_real_mic():
     source = FakeFrameSource([b"\x00" * 2560])
     detector = OpenWakeWordDetector(
-        wake_word="hey jarvis",
+        wake_word="pran",
+        model_name="pran",
         threshold=0.5,
         frame_source=source,
-        predictor=lambda raw: {"hey_jarvis": 0.91},
+        predictor=lambda raw: {"pran": 0.91},
     )
 
     detected = detector.wait(Event())
@@ -492,8 +494,10 @@ def test_openwakeword_detector_releases_mic_when_stopped():
     stop_event.set()
     source = FakeFrameSource()
     detector = OpenWakeWordDetector(
+        wake_word="pran",
+        model_name="pran",
         frame_source=source,
-        predictor=lambda raw: {"hey_jarvis": 0.1},
+        predictor=lambda raw: {"pran": 0.1},
     )
 
     detected = detector.wait(stop_event)
@@ -501,6 +505,79 @@ def test_openwakeword_detector_releases_mic_when_stopped():
 
     assert detected is False
     assert source.stopped >= 1
+
+
+def test_custom_wake_word_requires_trained_model_path():
+    try:
+        _resolve_wake_word_model("pran")
+    except RuntimeError as error:
+        message = str(error)
+        assert "no pretrained model" in message
+        assert "ENGLISH_AGENT_WAKE_WORD_MODEL" in message
+    else:
+        raise AssertionError("custom wake word must require a model")
+
+
+def test_custom_wake_word_uses_configured_model_path(tmp_path):
+    model_path = tmp_path / "pran.onnx"
+    model_path.write_bytes(b"onnx")
+
+    resolved = _resolve_wake_word_model("pran", str(model_path))
+
+    assert resolved == str(model_path)
+
+
+def test_pretrained_wake_word_still_resolves_without_custom_model():
+    assert _resolve_wake_word_model("hey jarvis") == "hey_jarvis"
+    assert _resolve_wake_word_model("hey mycroft") == "hey_mycroft"
+
+
+def test_from_env_custom_wake_word_without_model_disables_safely(
+    tmp_path,
+    conversation_service_factory,
+    monkeypatch,
+):
+    monkeypatch.setenv("ENGLISH_AGENT_WAKE_WORD_ENABLED", "true")
+    monkeypatch.setenv("ENGLISH_AGENT_WAKE_WORD", "pran")
+    monkeypatch.delenv("ENGLISH_AGENT_WAKE_WORD_MODEL", raising=False)
+    errors = []
+    controller, _output, _speech_provider = _build_controller(
+        tmp_path,
+        conversation_service_factory,
+    )
+
+    service = WakeWordService.from_env(
+        controller=controller,
+        error_handler=errors.append,
+    )
+
+    assert service.enabled is False
+    assert service.wake_word == "pran"
+    assert isinstance(service.detector, NullWakeWordDetector)
+    assert "ENGLISH_AGENT_WAKE_WORD_MODEL" in str(errors[0])
+
+
+def test_from_env_custom_wake_word_with_model_keeps_provider(
+    tmp_path,
+    conversation_service_factory,
+    monkeypatch,
+):
+    model_path = tmp_path / "pran.onnx"
+    model_path.write_bytes(b"onnx")
+    monkeypatch.setenv("ENGLISH_AGENT_WAKE_WORD_ENABLED", "true")
+    monkeypatch.setenv("ENGLISH_AGENT_WAKE_WORD", "pran")
+    monkeypatch.setenv("ENGLISH_AGENT_WAKE_WORD_MODEL", str(model_path))
+    controller, _output, _speech_provider = _build_controller(
+        tmp_path,
+        conversation_service_factory,
+    )
+
+    service = WakeWordService.from_env(controller=controller)
+
+    assert service.enabled is True
+    assert service.wake_word == "pran"
+    assert isinstance(service.detector, OpenWakeWordDetector)
+    assert service.detector.model_name == str(model_path)
 
 
 def test_arecord_frame_source_does_not_hardcode_device(monkeypatch):

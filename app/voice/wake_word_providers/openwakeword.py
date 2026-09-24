@@ -101,7 +101,7 @@ class OpenWakeWordDetector:
     ) -> None:
         self.wake_word = wake_word
         self.threshold = threshold
-        self.model_name = model_name or _model_name_from_wake_word(wake_word)
+        self.model_name = model_name or _resolve_wake_word_model(wake_word)
         self.frame_source = frame_source or ArecordFrameSource()
         self.predictor = predictor
         self.model_factory = model_factory or _openwakeword_model_from_env
@@ -130,7 +130,7 @@ class OpenWakeWordDetector:
                 "ENGLISH_AGENT_WAKE_WORD_THRESHOLD",
                 DEFAULT_WAKE_WORD_THRESHOLD,
             ),
-            model_name=model_path or _model_name_from_wake_word(wake_word),
+            model_name=_resolve_wake_word_model(wake_word, model_path),
             frame_source=ArecordFrameSource(command=command),
         )
 
@@ -184,15 +184,36 @@ class OpenWakeWordDetector:
         return float(prediction) >= self.threshold
 
 
-def _model_name_from_wake_word(wake_word: str) -> str:
-    normalized = " ".join(wake_word.strip().lower().split())
+def _resolve_wake_word_model(
+    wake_word: str,
+    model_path: str = "",
+) -> str:
+    if model_path:
+        resolved_path = Path(model_path)
+
+        if not resolved_path.exists():
+            raise RuntimeError(
+                "Wake word model not found: "
+                f"{model_path}. Train an openWakeWord ONNX model "
+                "for this phrase and set "
+                "ENGLISH_AGENT_WAKE_WORD_MODEL."
+            )
+
+        return str(resolved_path)
 
     if Path(wake_word).exists():
         return wake_word
 
-    return PRETRAINED_WAKE_WORDS.get(
-        normalized,
-        normalized.replace(" ", "_"),
+    normalized = " ".join(wake_word.strip().lower().split())
+    pretrained = PRETRAINED_WAKE_WORDS.get(normalized)
+
+    if pretrained:
+        return pretrained
+
+    raise RuntimeError(
+        f'openWakeWord has no pretrained model for "{wake_word}". '
+        "A custom phrase needs a trained ONNX or TFLite model. "
+        "Set ENGLISH_AGENT_WAKE_WORD_MODEL to that file path."
     )
 
 
@@ -201,16 +222,15 @@ def _openwakeword_model_from_env(model_name: str):
     from openwakeword.model import Model
 
     if Path(model_name).exists():
-        model_ref = model_name
-        download_names = []
-    else:
-        model_ref = model_name
-        download_names = [model_name]
+        return Model(
+            wakeword_models=[model_name],
+            inference_framework="onnx",
+        )
 
-    openwakeword.utils.download_models(model_names=download_names)
+    openwakeword.utils.download_models(model_names=[model_name])
 
     return Model(
-        wakeword_models=[model_ref],
+        wakeword_models=[model_name],
         inference_framework="onnx",
     )
 
