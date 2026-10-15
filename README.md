@@ -248,42 +248,37 @@ Configuração:
 
 - `ENGLISH_AGENT_WAKE_WORD_ENABLED=true` habilita a espera em background.
 - `ENGLISH_AGENT_WAKE_WORD_ENABLED=false` ou ausente mantém só `/voice`.
-- `ENGLISH_AGENT_WAKE_WORD=pran` seleciona a frase falada. O padrão do projeto é `pran`.
+- `ENGLISH_AGENT_WAKE_WORD=hey pran` seleciona a frase falada. O padrão do projeto é `hey pran`.
 - `ENGLISH_AGENT_WAKE_WORD_PROVIDER=openwakeword` seleciona o provider atual.
 - `ENGLISH_AGENT_WAKE_WORD_THRESHOLD=0.5` ajusta a sensibilidade.
-- `ENGLISH_AGENT_WAKE_WORD_MODEL=/caminho/modelo.onnx` é obrigatório para frases customizadas.
+- `ENGLISH_AGENT_WAKE_WORD_MODEL=models/hey_pran.onnx` aponta o ONNX customizado em caminho relativo ao repositório.
+- `ENGLISH_AGENT_WAKE_WORD_DEBUG=true` imprime scores de diagnóstico.
+- `ENGLISH_AGENT_WAKE_WORD_COOLDOWN_SECONDS=2` evita várias ativações da mesma fala.
 - `ENGLISH_AGENT_WAKE_WORD_RECORD_COMMAND=arecord` captura o stream local no dispositivo padrão.
 - `ENGLISH_AGENT_VOICE_SESSION_TIMEOUT_SECONDS=15` encerra a sessão após esse tempo de inatividade entre turnos, não o tempo total da conversa.
 
-O openWakeWord **não reconhece uma frase nova só pelo texto**. Os modelos prontos são `hey jarvis`, `hey mycroft`, `alexa` e `hey rhasspy`. `pran` precisa de um modelo ONNX/TFLite treinado.
-
-Como treinar o modelo de `pran`:
-
-1. Use o notebook oficial do openWakeWord ([Colab](https://colab.research.google.com/drive/1q1oe2zOyZp7UsB3jJiQ1IFn8z5YfjwEb) ou `notebooks/automatic_model_training.ipynb`).
-2. Gere o modelo da frase `pran` (saída `.onnx` ou `.tflite`).
-3. Salve o arquivo, por exemplo em `data/wake_words/pran.onnx`.
-4. Configure só o `.env`:
+O modelo **Hey Pran** já está no repositório em `models/hey_pran.onnx`, com os auxiliares ONNX do openWakeWord (`melspectrogram.onnx` e `embedding_model.onnx`). A detecção usa só ONNX, em CPU, sem API externa.
 
 ```bash
-ENGLISH_AGENT_WAKE_WORD=pran
-ENGLISH_AGENT_WAKE_WORD_MODEL=data/wake_words/pran.onnx
+ENGLISH_AGENT_WAKE_WORD=hey pran
+ENGLISH_AGENT_WAKE_WORD_MODEL=models/hey_pran.onnx
 ```
 
-Sem esse arquivo, a wake word é desligada com erro claro e o `/voice` continua funcionando. Não use um modelo de outra palavra no lugar.
+Não use um caminho absoluto da sua máquina. Sem o arquivo, a wake word é desligada com erro claro e o `/voice` continua funcionando. Não use um modelo de outra palavra no lugar.
 
-Para testar com um modelo pronto, enquanto o de `pran` não existir:
+Para testar com um modelo pronto da biblioteca:
 
 ```bash
 ENGLISH_AGENT_WAKE_WORD=hey jarvis
 ```
 
-Com o modelo de `pran` configurado:
+Com o modelo de **Hey Pran**:
 
 ```bash
 python main.py
 ```
 
-Diga `pran`. O agente inicia uma sessão de voz, entra em `Listening...` e continua ouvindo após cada resposta até silêncio ou despedida. `/voice` continua sendo um único turno.
+Diga `Hey Pran`. O agente inicia uma sessão de voz, entra em `Listening...` e continua ouvindo após cada resposta até silêncio ou despedida. A detecção da wake word fica pausada enquanto a sessão/TTS está ativa. `/voice` continua sendo um único turno.
 
 ### Fase 2 — Voz
 - IA fala

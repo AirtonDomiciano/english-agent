@@ -7,7 +7,7 @@ from app.voice.controller import VoiceConversationController
 from app.voice.session import VoiceConversationSession
 
 
-DEFAULT_WAKE_WORD = "pran"
+DEFAULT_WAKE_WORD = "hey pran"
 DEFAULT_WAKE_WORD_PROVIDER = "openwakeword"
 DEFAULT_WAKE_WORD_THRESHOLD = 0.5
 
@@ -62,6 +62,9 @@ class WakeWordService:
         self.output = output
         self._stop_event = Event()
         self._thread: Thread | None = None
+
+        if getattr(self.detector, "pause_check", None) is None:
+            self.detector.pause_check = self._should_pause
 
     @classmethod
     def from_env(
@@ -161,7 +164,16 @@ class WakeWordService:
             except Exception as error:
                 self.error_handler(error)
 
+    def _should_pause(self) -> bool:
+        if self.session is not None and self.session.is_active:
+            return True
+
+        return self.controller.is_busy
+
     def _start_conversation(self) -> None:
+        if self._should_pause():
+            return
+
         if self.session is not None:
             if not self.session.can_start():
                 return

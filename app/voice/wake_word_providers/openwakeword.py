@@ -3,6 +3,8 @@ import shlex
 import subprocess
 from pathlib import Path
 from threading import Event
+from time import monotonic
+from typing import Callable, TextIO
 
 from app.voice.wake_word import (
     DEFAULT_WAKE_WORD,
@@ -15,6 +17,11 @@ DEFAULT_WAKE_WORD_RECORD_COMMAND = "arecord"
 DEFAULT_WAKE_WORD_SAMPLE_RATE = 16000
 DEFAULT_WAKE_WORD_CHANNELS = 1
 DEFAULT_WAKE_WORD_FRAME_SAMPLES = 1280
+DEFAULT_WAKE_WORD_COOLDOWN_SECONDS = 2.0
+DEFAULT_WAKE_WORD_SCORE_PRINT_THRESHOLD = 0.2
+DEFAULT_WAKE_WORD_MODEL = "models/hey_pran.onnx"
+MELSPECTROGRAM_MODEL = "models/melspectrogram.onnx"
+EMBEDDING_MODEL = "models/embedding_model.onnx"
 PRETRAINED_WAKE_WORDS = {
     "alexa": "alexa",
     "hey jarvis": "hey_jarvis",
@@ -23,6 +30,11 @@ PRETRAINED_WAKE_WORDS = {
     "hey_mycroft": "hey_mycroft",
     "hey rhasspy": "hey_rhasspy",
     "hey_rhasspy": "hey_rhasspy",
+}
+BUNDLED_WAKE_WORDS = {
+    "hey pran": DEFAULT_WAKE_WORD_MODEL,
+    "hey_pran": DEFAULT_WAKE_WORD_MODEL,
+    "pran": DEFAULT_WAKE_WORD_MODEL,
 }
 
 
@@ -98,6 +110,14 @@ class OpenWakeWordDetector:
         predictor=None,
         model_factory=None,
         frame_samples: int = DEFAULT_WAKE_WORD_FRAME_SAMPLES,
+        cooldown_seconds: float = DEFAULT_WAKE_WORD_COOLDOWN_SECONDS,
+        debug: bool = False,
+        pause_check: Callable[[], bool] | None = None,
+        clock: Callable[[], float] | None = None,
+        output: TextIO | None = None,
+        score_print_threshold: float = (
+            DEFAULT_WAKE_WORD_SCORE_PRINT_THRESHOLD
+        ),
     ) -> None:
         self.wake_word = wake_word
         self.threshold = threshold
@@ -107,7 +127,17 @@ class OpenWakeWordDetector:
         self.model_factory = model_factory or _openwakeword_model_from_env
         self.frame_samples = frame_samples
         self.frame_bytes = frame_samples * 2
+        self.cooldown_seconds = max(0.0, cooldown_seconds)
+        self.debug = debug
+        self.pause_check = pause_check
+        self._clock = clock or monotonic
+        self.output = output
+        self.score_print_threshold = score_print_threshold
         self._model = None
+        self._latched = False
+        self._last_detection_at = -self.cooldown_seconds
+        self._last_printed_score: float | None = None
+        self._last_score_print_at = 0.0
 
     @classmethod
     def from_env(
@@ -132,6 +162,11 @@ class OpenWakeWordDetector:
             ),
             model_name=_resolve_wake_word_model(wake_word, model_path),
             frame_source=ArecordFrameSource(command=command),
+            cooldown_seconds=_env_float(
+                "ENGLISH_AGENT_WAKE_WORD_COOLDOWN_SECONDS",
+                DEFAULT_WAKE_WORD_COOLDOWN_SECONDS,
+            ),
+            debug=_env_flag("ENGLISH_AGENT_WAKE_WORD_DEBUG"),
         )
 
     def wait(self, stop_event: Event) -> bool:
@@ -147,7 +182,14 @@ class OpenWakeWordDetector:
 
                     continue
 
-                if self._is_detected(self._predict(raw)):
+                if self.pause_check and self.pause_check():
+                    self._latched = True
+                    continue
+
+                score = peak_score(self._predict(raw))
+                self._maybe_print_score(score)
+
+                if self._accept_detection(score):
                     return True
 
             return False
@@ -156,6 +198,42 @@ class OpenWakeWordDetector:
 
     def close(self) -> None:
         self.frame_source.stop()
+
+    def _accept_detection(self, score: float) -> bool:
+        if score < self.threshold:
+            self._latched = False
+            return False
+
+        now = self._clock()
+        cooled_down = now - self._last_detection_at >= self.cooldown_seconds
+
+        if self._latched or not cooled_down:
+            return False
+
+        self._latched = True
+        self._last_detection_at = now
+        return True
+
+    def _maybe_print_score(self, score: float) -> None:
+        if not self.debug or not self._should_print_score(score):
+            return
+
+        now = self._clock()
+        self._last_printed_score = score
+        self._last_score_print_at = now
+        print(f"Wake word score={score:.2f}", file=self.output, flush=True)
+
+    def _should_print_score(self, score: float) -> bool:
+        if score < self.score_print_threshold:
+            return False
+
+        if self._last_printed_score is None:
+            return True
+
+        if abs(score - self._last_printed_score) >= 0.1:
+            return True
+
+        return self._clock() - self._last_score_print_at >= 0.5
 
     def _predict(self, raw: bytes):
         if self.predictor is not None:
@@ -174,14 +252,34 @@ class OpenWakeWordDetector:
 
         return self._model
 
-    def _is_detected(self, prediction) -> bool:
-        if isinstance(prediction, dict):
-            return any(
-                float(score) >= self.threshold
-                for score in prediction.values()
-            )
 
-        return float(prediction) >= self.threshold
+def peak_score(prediction) -> float:
+    if isinstance(prediction, dict):
+        if not prediction:
+            return 0.0
+
+        return max(float(score) for score in prediction.values())
+
+    return float(prediction)
+
+
+def _project_root() -> Path:
+    current = Path(__file__).resolve()
+
+    for parent in current.parents:
+        if (parent / "main.py").exists() and (parent / "app").is_dir():
+            return parent
+
+    return current.parents[3]
+
+
+def _resolve_repo_path(path: str) -> Path:
+    candidate = Path(path).expanduser()
+
+    if not candidate.is_absolute():
+        candidate = _project_root() / candidate
+
+    return candidate.resolve()
 
 
 def _resolve_wake_word_model(
@@ -189,7 +287,7 @@ def _resolve_wake_word_model(
     model_path: str = "",
 ) -> str:
     if model_path:
-        resolved_path = Path(model_path)
+        resolved_path = _resolve_repo_path(model_path)
 
         if not resolved_path.exists():
             raise RuntimeError(
@@ -205,6 +303,14 @@ def _resolve_wake_word_model(
         return wake_word
 
     normalized = " ".join(wake_word.strip().lower().split())
+    bundled = BUNDLED_WAKE_WORDS.get(normalized)
+
+    if bundled:
+        bundled_path = _resolve_repo_path(bundled)
+
+        if bundled_path.exists():
+            return str(bundled_path)
+
     pretrained = PRETRAINED_WAKE_WORDS.get(normalized)
 
     if pretrained:
@@ -217,14 +323,32 @@ def _resolve_wake_word_model(
     )
 
 
+def _ensure_feature_models() -> tuple[str, str]:
+    melspec = _resolve_repo_path(MELSPECTROGRAM_MODEL)
+    embedding = _resolve_repo_path(EMBEDDING_MODEL)
+
+    if melspec.exists() and embedding.exists():
+        return str(melspec), str(embedding)
+
+    raise RuntimeError(
+        "openWakeWord feature models are missing. "
+        f"Expected {MELSPECTROGRAM_MODEL} and {EMBEDDING_MODEL} "
+        "next to the wake word model."
+    )
+
+
 def _openwakeword_model_from_env(model_name: str):
     import openwakeword
     from openwakeword.model import Model
+
+    melspec_path, embedding_path = _ensure_feature_models()
 
     if Path(model_name).exists():
         return Model(
             wakeword_models=[model_name],
             inference_framework="onnx",
+            melspec_model_path=melspec_path,
+            embedding_model_path=embedding_path,
         )
 
     openwakeword.utils.download_models(model_names=[model_name])
@@ -232,6 +356,8 @@ def _openwakeword_model_from_env(model_name: str):
     return Model(
         wakeword_models=[model_name],
         inference_framework="onnx",
+        melspec_model_path=melspec_path,
+        embedding_model_path=embedding_path,
     )
 
 
@@ -240,3 +366,12 @@ def _env_float(name: str, default: float) -> float:
         return float(os.getenv(name, default))
     except (TypeError, ValueError):
         return default
+
+
+def _env_flag(name: str) -> bool:
+    return os.getenv(name, "").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }

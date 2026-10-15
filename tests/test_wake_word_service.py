@@ -13,7 +13,10 @@ from app.voice import (
 from app.voice.wake_word_providers.openwakeword import (
     ArecordFrameSource,
     OpenWakeWordDetector,
+    _openwakeword_model_from_env,
+    _project_root,
     _resolve_wake_word_model,
+    peak_score,
 )
 
 
@@ -509,7 +512,7 @@ def test_openwakeword_detector_releases_mic_when_stopped():
 
 def test_custom_wake_word_requires_trained_model_path():
     try:
-        _resolve_wake_word_model("pran")
+        _resolve_wake_word_model("mira")
     except RuntimeError as error:
         message = str(error)
         assert "no pretrained model" in message
@@ -538,7 +541,7 @@ def test_from_env_custom_wake_word_without_model_disables_safely(
     monkeypatch,
 ):
     monkeypatch.setenv("ENGLISH_AGENT_WAKE_WORD_ENABLED", "true")
-    monkeypatch.setenv("ENGLISH_AGENT_WAKE_WORD", "pran")
+    monkeypatch.setenv("ENGLISH_AGENT_WAKE_WORD", "mira")
     monkeypatch.delenv("ENGLISH_AGENT_WAKE_WORD_MODEL", raising=False)
     errors = []
     controller, _output, _speech_provider = _build_controller(
@@ -552,7 +555,7 @@ def test_from_env_custom_wake_word_without_model_disables_safely(
     )
 
     assert service.enabled is False
-    assert service.wake_word == "pran"
+    assert service.wake_word == "mira"
     assert isinstance(service.detector, NullWakeWordDetector)
     assert "ENGLISH_AGENT_WAKE_WORD_MODEL" in str(errors[0])
 
@@ -610,3 +613,175 @@ def test_arecord_frame_source_does_not_hardcode_device(monkeypatch):
     assert started["command"][0] == "arecord"
     assert "-D" not in started["command"]
     assert started["terminated"] is True
+
+
+def test_hey_pran_resolves_to_bundled_relative_onnx():
+    resolved = Path(_resolve_wake_word_model("hey pran"))
+    project_root = _project_root()
+
+    assert resolved == (project_root / "models" / "hey_pran.onnx").resolve()
+    assert resolved.is_relative_to(project_root)
+    assert "hey_pran_work" not in str(resolved)
+    assert peak_score({"hey_pran": 0.87}) == 0.87
+
+
+def test_relative_model_path_is_resolved_from_repo_root():
+    resolved = Path(
+        _resolve_wake_word_model("hey pran", "models/hey_pran.onnx")
+    )
+
+    assert resolved == (_project_root() / "models" / "hey_pran.onnx").resolve()
+    assert resolved.exists()
+
+
+def test_detector_cooldown_and_latch_block_repeat_activation():
+    clock = {"now": 0.0}
+    source = FakeFrameSource([b"\x00" * 2560])
+    detector = OpenWakeWordDetector(
+        wake_word="hey pran",
+        model_name="hey_pran",
+        threshold=0.5,
+        cooldown_seconds=2.0,
+        frame_source=source,
+        predictor=lambda raw: {"hey_pran": 0.91},
+        clock=lambda: clock["now"],
+    )
+
+    assert detector.wait(Event()) is True
+
+    clock["now"] = 0.5
+    stop_event = Event()
+    source.frames = [b"\x00" * 2560]
+
+    def predictor(_raw: bytes):
+        stop_event.set()
+        return {"hey_pran": 0.91}
+
+    detector.predictor = predictor
+    assert detector.wait(stop_event) is False
+
+
+def test_detector_prints_debug_scores_without_repeating_detection():
+    output = StringIO()
+    source = FakeFrameSource([b"\x00" * 2560, b"\x00" * 2560])
+    scores = [0.23, 0.91]
+
+    def predictor(_raw: bytes):
+        return {"hey_pran": scores.pop(0)}
+
+    detector = OpenWakeWordDetector(
+        wake_word="hey pran",
+        model_name="hey_pran",
+        threshold=0.5,
+        debug=True,
+        frame_source=source,
+        predictor=predictor,
+        output=output,
+    )
+
+    assert detector.wait(Event()) is True
+    assert "Wake word score=0.23" in output.getvalue()
+    assert "Wake word score=0.91" in output.getvalue()
+
+
+def test_detector_ignores_scores_while_paused():
+    source = FakeFrameSource([b"\x00" * 2560, b"\x00" * 2560])
+    stop_event = Event()
+    remaining = [True, False]
+
+    def pause_check():
+        paused = remaining.pop(0)
+
+        if not remaining:
+            stop_event.set()
+
+        return paused
+
+    detector = OpenWakeWordDetector(
+        wake_word="hey pran",
+        model_name="hey_pran",
+        threshold=0.5,
+        frame_source=source,
+        predictor=lambda raw: {"hey_pran": 0.99},
+        pause_check=pause_check,
+    )
+
+    assert detector.wait(stop_event) is False
+
+
+def test_wake_word_does_not_start_session_while_controller_is_busy(
+    tmp_path,
+    conversation_service_factory,
+    fake_ai_client,
+):
+    started = Event()
+    release = Event()
+    recorder = FakeAudioRecorder(
+        tmp_path / "voice.wav",
+        on_record=lambda: (started.set(), release.wait(timeout=1)),
+    )
+    controller, _output, speech_provider = _build_controller(
+        tmp_path,
+        conversation_service_factory,
+        recorder=recorder,
+        conversation=conversation_service_factory(
+            ai_client=fake_ai_client
+        ),
+    )
+    detector = ControllableDetector()
+    service = WakeWordService(
+        controller=controller,
+        detector=detector,
+        enabled=True,
+    )
+    worker = Thread(target=controller.handle_voice_turn)
+
+    worker.start()
+    assert started.wait(timeout=1)
+    service.start()
+    assert detector.wait_started.wait(timeout=1)
+    detector.emit(True)
+    assert _wait_until(lambda: detector.wait_calls >= 2)
+    assert recorder.calls == 1
+    release.set()
+    worker.join(timeout=1)
+    service.stop()
+
+    assert speech_provider.spoken_texts == [
+        "Fake response for: How was your day?"
+    ]
+
+
+def test_from_env_hey_pran_uses_bundled_model(
+    tmp_path,
+    conversation_service_factory,
+    monkeypatch,
+):
+    monkeypatch.setenv("ENGLISH_AGENT_WAKE_WORD_ENABLED", "true")
+    monkeypatch.setenv("ENGLISH_AGENT_WAKE_WORD", "hey pran")
+    monkeypatch.delenv("ENGLISH_AGENT_WAKE_WORD_MODEL", raising=False)
+    controller, _output, _speech_provider = _build_controller(
+        tmp_path,
+        conversation_service_factory,
+    )
+
+    service = WakeWordService.from_env(controller=controller)
+
+    assert service.enabled is True
+    assert service.wake_word == "hey pran"
+    assert isinstance(service.detector, OpenWakeWordDetector)
+    assert service.detector.model_name.endswith(
+        str(Path("models") / "hey_pran.onnx")
+    )
+
+
+def test_hey_pran_onnx_loads_without_microphone():
+    model = _openwakeword_model_from_env(
+        str(_project_root() / "models" / "hey_pran.onnx")
+    )
+    import numpy as np
+
+    prediction = model.predict(np.zeros(1280, dtype=np.int16))
+
+    assert prediction
+    assert any("pran" in name for name in prediction)
